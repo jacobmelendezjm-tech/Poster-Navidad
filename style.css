@@ -1,0 +1,397 @@
+/* =========================================================
+   CARTEL INTERACTIVO · 21 DE DICIEMBRE · FUNDACIÓN ITACA
+   ========================================================= */
+
+:root {
+  --noche: #0d1b3d;
+  --noche-oscura: #070e24;
+  --oro: #f5b942;
+  --rojo: #ff4d5e;
+  --verde: #2a9d8f;
+  --crema: #fff4e0;
+  --nieve: #f4f7ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #04060d;
+  font-family: "DM Sans", sans-serif;
+}
+
+.aviso {
+  color: var(--crema);
+  font-size: 18px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ---------- Escalado: el cartel siempre mide 848×1200 ---------- */
+.escenario {
+  position: relative;
+}
+
+.escalador {
+  transform-origin: top left;
+}
+
+/* ---------- Cartel ---------- */
+.poster {
+  position: relative;
+  width: 848px;
+  height: 1200px;
+  overflow: hidden;
+  color: var(--crema);
+  background: radial-gradient(ellipse at 50% 0%, #1d3a7a 0%, var(--noche) 55%, var(--noche-oscura) 100%);
+}
+
+/* Luz cálida que sigue al cursor (mousemove) */
+.luz-calida {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* ---------- Nieve con profundidad (mousemove) ---------- */
+.nieve {
+  position: absolute;
+  inset: -60px;
+  pointer-events: none;
+  transition: transform 0.3s ease-out;
+}
+
+.nieve--cerca {
+  z-index: 10;
+  filter: blur(1.5px);
+}
+
+.copo {
+  position: absolute;
+  top: -20px;
+  border-radius: 50%;
+  background: var(--nieve);
+  animation-name: caer;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes caer {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(18px, 660px); }
+  100% { transform: translate(-6px, 1340px); }
+}
+
+/* ---------- Cabecera ---------- */
+.cabecera {
+  position: absolute;
+  top: 36px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 244, 224, 0.25);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ---------- Fecha ---------- */
+.fecha {
+  position: absolute;
+  top: 80px;
+  left: 40px;
+  width: 440px;
+  height: 360px;
+}
+
+.fecha__numero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: "Anton", sans-serif;
+  font-size: 400px;
+  line-height: 0.9;
+  color: var(--oro);
+  transition: transform 0.3s ease-out;
+}
+
+.fecha__numero--sombra {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--rojo);
+}
+
+.fecha-texto {
+  position: absolute;
+  top: 190px;
+  right: 48px;
+  text-align: right;
+  font-family: "Anton", sans-serif;
+  text-transform: uppercase;
+  line-height: 0.95;
+}
+
+.fecha-texto__de {
+  display: block;
+  font-size: 56px;
+}
+
+.fecha-texto__mes {
+  display: block;
+  font-size: 76px;
+}
+
+.fecha-texto__extra {
+  display: block;
+  margin-top: 14px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  opacity: 0.85;
+}
+
+/* ---------- Título ---------- */
+.titulo {
+  position: absolute;
+  top: 450px;
+  left: 48px;
+  margin: 0;
+  font-family: "Anton", sans-serif;
+  font-size: 104px;
+  font-weight: 400;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.titulo span {
+  display: block;
+}
+
+.titulo__destacado {
+  color: var(--rojo);
+}
+
+.pista {
+  position: absolute;
+  top: 600px;
+  right: 44px;
+  margin: 0;
+  font-family: "Caveat", cursive;
+  font-size: 30px;
+  line-height: 1;
+  text-align: right;
+  color: var(--oro);
+  transform: rotate(-6deg);
+}
+
+/* ---------- Colina de nieve ---------- */
+.colina {
+  position: absolute;
+  top: 880px;
+  left: -80px;
+  width: 1008px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(var(--nieve), #b9c8ea);
+}
+
+/* ---------- Regalos (mouseenter / mouseleave) ---------- */
+.regalos {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 300px; /* la base de los regalos queda en y = 900px */
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 40px;
+}
+
+.regalo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.regalo__tapa {
+  position: relative;
+  z-index: 2;
+  height: 34px;
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg,
+      transparent calc(50% - 12px),
+      var(--lazo) calc(50% - 12px),
+      var(--lazo) calc(50% + 12px),
+      transparent calc(50% + 12px)),
+    var(--color);
+  transform-origin: left bottom;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Lazo dibujado con dos lazadas */
+.regalo__tapa::before,
+.regalo__tapa::after {
+  content: "";
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: 50%;
+  width: 30px;
+  height: 22px;
+  border: 6px solid var(--lazo);
+  border-radius: 50%;
+}
+
+.regalo__tapa::before {
+  transform: translateX(-100%) rotate(-25deg);
+  transform-origin: right bottom;
+}
+
+.regalo__tapa::after {
+  transform: rotate(25deg);
+  transform-origin: left bottom;
+}
+
+.regalo__caja {
+  position: relative;
+  z-index: 1;
+  border-radius: 0 0 6px 6px;
+  background:
+    linear-gradient(90deg,
+      transparent calc(50% - 12px),
+      var(--lazo) calc(50% - 12px),
+      var(--lazo) calc(50% + 12px),
+      transparent calc(50% + 12px)),
+    var(--color);
+  transition: box-shadow 0.3s, filter 0.3s;
+}
+
+.regalo__luz {
+  position: absolute;
+  left: 50%;
+  width: 160%;
+  height: 220px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 100%, rgba(255, 220, 140, 0.75), transparent 70%);
+  transform: translateX(-50%);
+  transition: opacity 0.35s;
+}
+
+.regalo__contenido {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+}
+
+.regalo__icono {
+  font-size: 54px;
+  line-height: 1;
+}
+
+.regalo__deseo {
+  margin-top: 6px;
+  font-family: "Caveat", cursive;
+  font-size: 28px;
+  color: var(--crema);
+}
+
+/* ---------- Mensaje + botón ---------- */
+.mensaje {
+  position: absolute;
+  top: 985px;
+  left: 48px;
+  width: 440px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.mensaje strong {
+  color: var(--oro);
+}
+
+.donar-bloque {
+  position: absolute;
+  top: 990px;
+  right: 48px;
+  width: 270px;
+  text-align: center;
+}
+
+.donar {
+  width: 100%;
+  height: 64px;
+  border: none;
+  border-radius: 999px;
+  font-family: "Anton", sans-serif;
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.3s, background 0.3s, color 0.3s;
+}
+
+.donar-bloque__info {
+  margin: 10px 0 0;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+/* ---------- Pie con logos ---------- */
+.pie {
+  position: absolute;
+  bottom: 32px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 244, 224, 0.25);
+}
+
+.logos {
+  display: flex;
+  gap: 16px;
+}
+
+.logo-hueco {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 48px;
+  border: 1px dashed rgba(255, 244, 224, 0.6);
+  border-radius: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.pie__info {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}

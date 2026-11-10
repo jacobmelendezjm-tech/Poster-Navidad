@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21 de diciembre · Fundación ITACA</title>
+
+  <!-- Tipografías -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Aviso si se abre con doble clic (file://): Babel necesita un servidor -->
+  <script>
+    if (location.protocol === "file:") {
+      document.getElementById("root").innerHTML =
+        '<p class="aviso">Abre el proyecto con <b>Live Server</b> (clic derecho en index.html → "Open with Live Server").</p>';
+    }
+  </script>
+
+  <!-- React 18 + Babel: permite escribir JSX en main.js sin instalar nada -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+  <script type="text/babel" src="main.js"></script>
+</body>
+</html>
