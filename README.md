@@ -1,4 +1,4 @@
-# Foco de Esperanza
+# Ilumina su Navidad
 
 Cartel digital interactivo (848 × 1200 px) para la campaña de Navidad de la **Fundación ITACA** (L'Hospitalet):
 donaciones para comprar regalos a niños y niñas en riesgo de exclusión social. **21 de diciembre.**
@@ -6,38 +6,39 @@ donaciones para comprar regalos a niños y niñas en riesgo de exclusión social
 Actividad 0612 · THE INTERACTIVE POSTER · Desarrollo web en entorno cliente.
 Hecho con HTML, CSS y JavaScript, sin librerías ni frameworks.
 
-![Captura del cartel con el regalo encendido](captura/cartel.png)
+**Web:** https://posternavidad.vercel.app
+
+![El cartel mientras el cursor ilumina las letras](captura/cartel.png)
 
 ## Concepto
 
-El cartel está a oscuras y **el cursor es una linterna**. Quien lo mira lleva la luz: al moverla descubre,
-escritos a mano, los deseos que hay escondidos en la oscuridad («una bici», «un cuento», «un peluche»…).
-Cuando la luz llega al regalo del centro, este se enciende, se abre y su resplandor alcanza todos los deseos a la vez.
+El cartel sigue el lenguaje de los carteles recogidos en [The Moving Poster](https://themovingposter.com/):
+tipografía gigante que es la propia imagen, tres tintas planas (naranja, negro y crema, con un acento rosa)
+y la información pequeña ordenada en columnas, como en el cartel suizo.
 
-Es el mensaje de la campaña convertido en gesto: _Ilumina su Navidad. Dona hoy._
-La información obligatoria (fecha, tema, mensaje y entidad) es siempre legible, con o sin luz.
+La idea es literal: **tu gesto ilumina**. Las letras del lema son pesadas y oscuras. Donde pasa el cursor
+llega una luz que las aligera: pierden peso y se vuelven claras. Así el mensaje _Ilumina su Navidad_
+ocurre en el propio cartel. La estrella de Navidad rosa es el botón de donar: al acercarse, crece, gira y se enciende.
 
-Paleta: negro, blanco y un único acento naranja (`#FF5722`), reservado para la luz y la llamada a donar.
-Tipografías: Montserrat (titulares), JetBrains Mono (datos) y Caveat (los deseos, con letra de niño).
+Tipografías: **Anybody**, una fuente variable con ejes de peso (100–900) y anchura (50–150), para el texto
+grande; **Inter Tight** para los textos pequeños.
 
 ## Estructura
 
 ```
-├── index.html      Estructura semántica del cartel y SVG del regalo
+├── index.html      Estructura semántica del cartel
 ├── style.css       Variables, reset, composición y transiciones
-├── main.js         Eventos e interacciones
+├── main.js         Tipografía cinética, eventos e interacciones
 ├── img/logos/      Logos oficiales de las entidades
 └── captura/        Capturas del cartel
 ```
 
-El cartel se construye en tres capas apiladas:
+`main.js` está ordenado en diez bloques: configuración, referencias al DOM, estado, cálculos (funciones puras),
+preparación de la tipografía, pintado, `mousemove`, `mouseenter`/`mouseleave`, escalado e inicio.
+Todos los `addEventListener` están juntos en `iniciarCartel()`.
 
-1. `.foco`: el resplandor naranja.
-2. `.revelado`: la trama de puntos, los deseos y el eco del «21». Tiene una máscara CSS con la forma del foco, así que solo se ve donde llega la luz.
-3. El contenido: fecha, regalo, lema, botón y pie.
-
-`main.js` está ordenado en nueve bloques: configuración, referencias al DOM, estado, cálculos, pintado,
-`mousemove`, `mouseenter`/`mouseleave`, escalado e inicio. Todos los `addEventListener` están juntos en `iniciarCartel()`.
+Al cargar, `prepararTipografia()` parte cada fila del texto en una `<span>` por letra (el texto completo queda en
+`aria-label`) y calcula el tamaño de letra con el que cada fila llena su ancho exacto (`ajustarFilaAlAncho()`).
 
 **No hay ninguna regla `:hover` en el CSS.** Las transiciones están en `style.css`, pero quien las dispara es siempre JavaScript.
 
@@ -45,57 +46,48 @@ El cartel se construye en tres capas apiladas:
 
 | Evento | Elemento | Función | Qué hace |
 | --- | --- | --- | --- |
-| `mousemove` | `#cartel` | `seguirCursor` | La luz sigue al cursor y la tipografía se desplaza en sentido contrario |
-| `mouseenter` | `#regalo` | `encenderRegalo` | El regalo crece, brilla y se abre; la luz se expande |
-| `mouseleave` | `#regalo` | `apagarRegalo` | El regalo vuelve a su tamaño y brillo iniciales |
-| `mouseenter` / `mouseleave` | `#boton-donar` | `encenderElemento` / `apagarElemento` | El botón reutiliza las mismas funciones que el regalo |
-| `mouseleave` | `#cartel` | `devolverFocoAlReposo` | La luz vuelve al regalo cuando el cursor sale del cartel |
+| `mousemove` | `#cartel` | `seguirCursor` | Las letras cercanas al cursor pierden peso y se iluminan; una luz sigue al cursor |
+| `mouseleave` | `#cartel` | `soltarCursor` | Las letras recuperan su peso y la luz se apaga |
+| `mouseenter` | `#estrella` | `encenderEstrella` | La estrella crece, gira y pasa de rosa a crema |
+| `mouseleave` | `#estrella` | `apagarEstrella` | La estrella vuelve a su tamaño, giro y color iniciales |
 | `resize` | `window` | `ajustarEscala` | Reduce el cartel entero si la ventana es más pequeña, sin deformarlo |
 
 ## Las tres interacciones
 
-### 1 · `mouseenter`: el regalo se enciende
+### 1 · `mouseenter`: la estrella se enciende
 
-Al entrar el cursor en el regalo, `encenderElemento()` modifica desde JavaScript **dos propiedades visuales**:
+Al entrar el cursor en la estrella, `encenderEstrella()` llama a `aplicarEstadoEstrella()`, que modifica desde
+JavaScript **dos propiedades visuales**:
 
 ```js
-elemento.style.transform = `scale(${elemento.dataset.escala})`;   // crece un 8 %
-elemento.style.filter = BRILLO.encendido;                         // resplandor naranja
+estrella.style.transform = "scale(1.14) rotate(-12deg)";  // crece y gira
+poligonoEstrella.style.fill = "#fff1e6";                   // de rosa a crema
 ```
 
-Además añade la clase `esta-encendido`, que levanta la tapa y hace aparecer la estrella, los rayos y los destellos.
-`encenderRegalo()` amplía también el radio del foco de 300 a 520 px y cambia el texto de la pista
-por «Tu donación enciende su Navidad». La entrada es rápida y con un pequeño rebote.
+La entrada es rápida y con un pequeño rebote.
 
 ### 2 · `mouseleave`: vuelve al estado inicial
 
-Al salir, `apagarElemento()` devuelve `transform` a `scale(1)` y `filter` a un brillo transparente, y quita la clase.
-`apagarRegalo()` restaura el radio del foco y el texto de la pista. La salida es distinta a la entrada:
-más lenta y sin rebote, como una luz que se apaga poco a poco.
+`apagarEstrella()` usa la misma función con el estado de reposo: `scale(1) rotate(0deg)` y el rosa original.
+La salida es más lenta y sin rebote, así que entrada y salida se distinguen.
 
-### 3 · `mousemove`: linterna y parallax
+### 3 · `mousemove`: tipografía cinética
 
-`seguirCursor()` hace tres cosas con las coordenadas del ratón:
+`seguirCursor()` convierte `clientX`/`clientY` a coordenadas del cartel con `getBoundingClientRect()`, de modo que
+el punto va de (0, 0) a (848, 1200) aunque el cartel esté escalado. Después, en cada fotograma
+(`requestAnimationFrame`), para cada letra:
 
-1. **Las convierte a coordenadas del cartel.** `obtenerPosicionEnCartel()` usa `clientX`/`clientY` y
-   `getBoundingClientRect()` para obtener un punto entre (0, 0) y (848, 1200), aunque el cartel esté escalado.
-2. **Mueve la luz.** El punto se guarda como _objetivo_. Un bucle con `requestAnimationFrame` acerca la luz
-   un 14 % en cada fotograma (`interpolar()`), lo que le da inercia, y escribe la posición en las variables CSS
-   `--foco-x`, `--foco-y` y `--foco-radio`. El resplandor y la máscara de la capa revelada se dibujan con ellas.
-3. **Desplaza la tipografía.** `calcularDesplazamientoParallax()` mide cuánto se ha alejado la luz de su punto de
-   reposo, lo multiplica por el `data-profundidad` de cada capa e invierte el signo:
+1. Se mide la distancia entre su centro y el cursor.
+2. `calcularInfluencia()` la convierte en un valor de 0 a 1: 1 justo debajo del cursor y 0 a partir de 240 px,
+   con una curva _smoothstep_ para que el cambio empiece y acabe suave.
+3. La influencia se acerca poco a poco a ese valor (`interpolar()`), lo que da inercia al movimiento.
+4. `pintarLetra()` aplica el resultado a **dos propiedades**: el peso de la fuente variable
+   (`font-variation-settings`, de 900 a 140) y el color (`mezclarColor()`, de negro a crema; las letras crema de
+   «Dona hoy.» hacen lo contrario).
 
-   ```js
-   const desvioX = (posicion.x - FOCO.reposo.x) / (CARTEL.ancho / 2);
-   return { x: -desvioX * profundidad, ... };
-   ```
-
-   La fecha y el lema (profundidad positiva) se alejan del cursor. El eco naranja del «21» y los deseos
-   (profundidad negativa) lo acompañan. Al moverse en sentidos opuestos aparece la sensación de profundidad.
-
-El lector de la cabecera (`FOCO X 0424 · Y 0670`) muestra en directo las coordenadas que usa el cartel.
-
-Si el sistema tiene activada la opción de reducir movimiento (`prefers-reduced-motion`), el parallax se desactiva.
+Cada fila reparte sus letras a lo ancho, así que cuando unas adelgazan el resto se reacomoda y la palabra se mueve.
+El bucle se detiene solo cuando todo ha llegado a su valor, para no gastar recursos con el cartel quieto.
+La cabecera muestra en directo las coordenadas que usa el cartel (`X 0424 · Y 0600`).
 
 ## Cómo ejecutarlo
 
