@@ -1,291 +1,255 @@
 /* =========================================================
-   CARTEL INTERACTIVO · 21 DE DICIEMBRE · FUNDACIÓN ITACA
-   React (vía CDN + Babel)
+   FOCO DE ESPERANZA
+   Cartel interactivo · 21 de diciembre · Fundación ITACA
+
+   Índice
+   1. Configuración
+   2. Referencias al DOM
+   3. Estado del foco
+   4. Cálculos (funciones puras)
+   5. Pintado: foco y parallax
+   6. Interacción · mousemove
+   7. Interacción · mouseenter y mouseleave
+   8. Escalado del cartel
+   9. Inicio
    ========================================================= */
 
-const { useState, useEffect, useMemo } = React;
+"use strict";
 
-/* ---------- Configuración ---------- */
+/* ---------- 1. Configuración ---------- */
 
-const POSTER_ANCHO = 848;
-const POSTER_ALTO = 1200;
+const CARTEL = {
+  ancho: 848,
+  alto: 1200,
+  margenVentana: 32, // aire mínimo entre el cartel y el borde de la ventana
+};
 
-// Cada regalo esconde un deseo
-const REGALOS = [
-  { id: 1, color: "#d7263d", lazo: "#f5b942", ancho: 170, alto: 140, icono: "📚", deseo: "un cuento" },
-  { id: 2, color: "#2a9d8f", lazo: "#fff4e0", ancho: 210, alto: 175, icono: "🧸", deseo: "un peluche" },
-  { id: 3, color: "#f5b942", lazo: "#d7263d", ancho: 160, alto: 120, icono: "⚽", deseo: "una pelota" },
-];
+const FOCO = {
+  reposo: { x: 424, y: 670 }, // centro del regalo: ahí descansa la luz
+  radioBase: 300,
+  radioEncendido: 520,        // al encender el regalo, la luz llega más lejos
+  suavizado: 0.14,            // 0 = no se mueve, 1 = sigue al cursor sin inercia
+};
 
-// Tres capas de nieve: cuanto más "cerca", más se mueve con el ratón
-const CAPAS_NIEVE = [
-  { id: "lejos", cantidad: 45, min: 2, max: 4, profundidad: 10 },
-  { id: "medio", cantidad: 25, min: 4, max: 7, profundidad: 25 },
-  { id: "cerca", cantidad: 10, min: 8, max: 14, profundidad: 55 },
-];
+const BRILLO = {
+  apagado: "drop-shadow(0 0 0 rgba(255, 87, 34, 0))",
+  encendido: "drop-shadow(0 0 42px rgba(255, 87, 34, 0.95))",
+};
 
-/* ---------- Utilidades ---------- */
+const TEXTO_PISTA = {
+  reposo: "Mueve el cursor · tú llevas la luz",
+  encendido: "Tu donación enciende su Navidad",
+};
 
-function crearCopos(cantidad, tamMin, tamMax) {
-  return Array.from({ length: cantidad }, (_, i) => ({
-    id: i,
-    left: Math.random() * 100,
-    size: tamMin + Math.random() * (tamMax - tamMin),
-    duracion: 8 + Math.random() * 10,
-    retraso: -Math.random() * 18, // negativo: los copos empiezan ya repartidos
-    opacidad: 0.4 + Math.random() * 0.6,
-  }));
+/* ---------- 2. Referencias al DOM ---------- */
+
+const escenario = document.getElementById("escenario");
+const cartel = document.getElementById("cartel");
+const regalo = document.getElementById("regalo");
+const botonDonar = document.getElementById("boton-donar");
+const pista = document.getElementById("pista");
+const lecturaFoco = document.getElementById("lectura-foco");
+const capasParallax = Array.from(document.querySelectorAll("[data-profundidad]"));
+
+// Si el usuario pide menos movimiento en su sistema, el parallax se desactiva
+const reducirMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const intensidadParallax = reducirMovimiento ? 0 : 1;
+
+/* ---------- 3. Estado del foco ---------- */
+
+// "objetivo" es donde está el cursor; "actual" es donde se pinta la luz.
+// En cada fotograma, "actual" se acerca un poco a "objetivo": eso da la inercia.
+const foco = {
+  actual: { x: FOCO.reposo.x, y: FOCO.reposo.y, radio: FOCO.radioBase },
+  objetivo: { x: FOCO.reposo.x, y: FOCO.reposo.y, radio: FOCO.radioBase },
+};
+
+let fotogramaPendiente = null;
+
+/* ---------- 4. Cálculos (funciones puras) ---------- */
+
+// Valor intermedio entre "inicio" y "fin". factor 0 → inicio, factor 1 → fin.
+function interpolar(inicio, fin, factor) {
+  return inicio + (fin - inicio) * factor;
 }
 
-// Escala el cartel para que quepa en pantalla sin deformarse.
-// Usa addEventListener("resize") sobre window.
-function useEscala() {
-  const [escala, setEscala] = useState(1);
+// Convierte las coordenadas del ratón (píxeles de la ventana) en coordenadas
+// del cartel (0–848, 0–1200), aunque el cartel esté escalado en pantalla.
+function obtenerPosicionEnCartel(evento) {
+  const marco = cartel.getBoundingClientRect();
 
-  useEffect(() => {
-    function ajustarEscala() {
-      const margen = 32;
-      const s = Math.min(
-        (window.innerWidth - margen) / POSTER_ANCHO,
-        (window.innerHeight - margen) / POSTER_ALTO,
-        1
-      );
-      setEscala(Math.max(s, 0.1));
-    }
-
-    ajustarEscala();
-    window.addEventListener("resize", ajustarEscala);
-    return () => window.removeEventListener("resize", ajustarEscala);
-  }, []);
-
-  return escala;
+  return {
+    x: ((evento.clientX - marco.left) / marco.width) * CARTEL.ancho,
+    y: ((evento.clientY - marco.top) / marco.height) * CARTEL.alto,
+  };
 }
 
-/* ---------- Componentes ---------- */
+// Calcula cuántos píxeles se desplaza una capa según la posición del foco.
+//   1. Se mide cuánto se aleja el foco de su punto de reposo, tomando medio
+//      cartel como unidad (aprox. de -1 a 1). En reposo el desvío es 0, así
+//      que la composición original queda intacta.
+//   2. Se multiplica por la profundidad de la capa (su desplazamiento en px).
+//   3. Se invierte el signo: la capa va en dirección contraria al ratón.
+// Una profundidad negativa hace que la capa acompañe al ratón.
+function calcularDesplazamientoParallax(posicion, profundidad) {
+  const desvioX = (posicion.x - FOCO.reposo.x) / (CARTEL.ancho / 2);
+  const desvioY = (posicion.y - FOCO.reposo.y) / (CARTEL.alto / 2);
 
-function CapaNieve({ capa, dx, dy }) {
-  const copos = useMemo(() => crearCopos(capa.cantidad, capa.min, capa.max), [capa]);
+  return {
+    x: -desvioX * profundidad * intensidadParallax,
+    y: -desvioY * profundidad * intensidadParallax,
+  };
+}
 
-  return (
-    <div
-      className={`nieve nieve--${capa.id}`}
-      style={{ transform: `translate(${dx * capa.profundidad}px, ${dy * capa.profundidad}px)` }}
-    >
-      {copos.map((c) => (
-        <span
-          key={c.id}
-          className="copo"
-          style={{
-            left: `${c.left}%`,
-            width: c.size,
-            height: c.size,
-            opacity: c.opacidad,
-            animationDuration: `${c.duracion}s`,
-            animationDelay: `${c.retraso}s`,
-          }}
-        />
-      ))}
-    </div>
+// Escala máxima con la que el cartel cabe entero en la ventana (nunca más de 1).
+function calcularEscala(anchoVentana, altoVentana) {
+  const escala = Math.min(
+    (anchoVentana - CARTEL.margenVentana) / CARTEL.ancho,
+    (altoVentana - CARTEL.margenVentana) / CARTEL.alto,
+    1
   );
+
+  return Math.max(escala, 0.1);
 }
 
-function Regalo({ regalo }) {
-  const [abierto, setAbierto] = useState(false);
+/* ---------- 5. Pintado: foco y parallax ---------- */
 
-  // INTERACCIÓN 1 · mouseenter → el regalo se abre
-  function abrirRegalo() {
-    setAbierto(true);
+// Mueve el resplandor y la máscara de la capa revelada (variables CSS)
+function pintarFoco() {
+  const { x, y, radio } = foco.actual;
+
+  cartel.style.setProperty("--foco-x", `${x.toFixed(1)}px`);
+  cartel.style.setProperty("--foco-y", `${y.toFixed(1)}px`);
+  cartel.style.setProperty("--foco-radio", `${radio.toFixed(1)}px`);
+
+  const lecturaX = String(Math.round(x)).padStart(4, "0");
+  const lecturaY = String(Math.round(y)).padStart(4, "0");
+  lecturaFoco.textContent = `X ${lecturaX} · Y ${lecturaY}`;
+}
+
+// Desplaza cada capa tipográfica según su data-profundidad
+function pintarParallax() {
+  capasParallax.forEach((capa) => {
+    const profundidad = Number(capa.dataset.profundidad);
+    const desplazamiento = calcularDesplazamientoParallax(foco.actual, profundidad);
+
+    capa.style.transform =
+      `translate3d(${desplazamiento.x.toFixed(2)}px, ${desplazamiento.y.toFixed(2)}px, 0)`;
+  });
+}
+
+// Bucle de animación: acerca el foco a su objetivo y se detiene al llegar
+function animarFoco() {
+  const { actual, objetivo } = foco;
+
+  actual.x = interpolar(actual.x, objetivo.x, FOCO.suavizado);
+  actual.y = interpolar(actual.y, objetivo.y, FOCO.suavizado);
+  actual.radio = interpolar(actual.radio, objetivo.radio, FOCO.suavizado);
+
+  pintarFoco();
+  pintarParallax();
+
+  const haLlegado =
+    Math.abs(objetivo.x - actual.x) < 0.1 &&
+    Math.abs(objetivo.y - actual.y) < 0.1 &&
+    Math.abs(objetivo.radio - actual.radio) < 0.1;
+
+  fotogramaPendiente = haLlegado ? null : requestAnimationFrame(animarFoco);
+}
+
+// Arranca el bucle solo si no está ya en marcha
+function solicitarAnimacion() {
+  if (fotogramaPendiente === null) {
+    fotogramaPendiente = requestAnimationFrame(animarFoco);
   }
-
-  // INTERACCIÓN 2 · mouseleave → el regalo se cierra
-  function cerrarRegalo() {
-    setAbierto(false);
-  }
-
-  return (
-    <div
-      className="regalo"
-      onMouseEnter={abrirRegalo}
-      onMouseLeave={cerrarRegalo}
-      style={{
-        "--color": regalo.color,
-        "--lazo": regalo.lazo,
-        width: regalo.ancho,
-        transform: abierto ? "translateY(-8px) scale(1.06)" : "translateY(0) scale(1)",
-      }}
-    >
-      <div
-        className="regalo__contenido"
-        style={{
-          opacity: abierto ? 1 : 0,
-          transform: abierto
-            ? "translate(-50%, -110px) scale(1)"
-            : "translate(-50%, 0) scale(0.4)",
-        }}
-      >
-        <span className="regalo__icono">{regalo.icono}</span>
-        <span className="regalo__deseo">{regalo.deseo}</span>
-      </div>
-
-      <div
-        className="regalo__luz"
-        style={{ bottom: regalo.alto - 10, opacity: abierto ? 1 : 0 }}
-      />
-
-      <div
-        className="regalo__tapa"
-        style={{
-          width: regalo.ancho + 20,
-          transform: abierto ? "translate(-30px, -60px) rotate(-18deg)" : "none",
-        }}
-      />
-
-      <div
-        className="regalo__caja"
-        style={{
-          width: regalo.ancho,
-          height: regalo.alto,
-          filter: abierto ? "brightness(1.15)" : "brightness(1)",
-          boxShadow: abierto
-            ? "0 0 70px 12px rgba(255, 205, 120, 0.55)"
-            : "0 18px 30px rgba(0, 0, 0, 0.35)",
-        }}
-      />
-    </div>
-  );
 }
 
-function BotonDonar() {
-  const [activo, setActivo] = useState(false);
+/* ---------- 6. Interacción · mousemove ---------- */
 
-  return (
-    <div className="donar-bloque">
-      <button
-        className="donar"
-        onMouseEnter={() => setActivo(true)}
-        onMouseLeave={() => setActivo(false)}
-        style={{
-          background: activo ? "var(--rojo)" : "var(--oro)",
-          color: activo ? "var(--crema)" : "var(--noche)",
-          transform: activo ? "scale(1.06) rotate(-2deg)" : "none",
-        }}
-      >
-        {activo ? "¡Gracias por sumar! ♥" : "Dona un regalo →"}
-      </button>
-      <p className="donar-bloque__info">Desde 10 € · [Bizum / web de donación]</p>
-    </div>
-  );
+// El foco persigue al cursor; el parallax se deriva de la posición del foco
+function seguirCursor(evento) {
+  const posicion = obtenerPosicionEnCartel(evento);
+
+  foco.objetivo.x = posicion.x;
+  foco.objetivo.y = posicion.y;
+  solicitarAnimacion();
 }
 
-function Poster() {
-  // Posición del ratón dentro del cartel, de 0 a 1 (centro = 0.5)
-  const [raton, setRaton] = useState({ x: 0.5, y: 0.4 });
-
-  // INTERACCIÓN 3 · mousemove → nieve con profundidad, "21" en 3D y luz que sigue al cursor
-  function moverRaton(evento) {
-    const rect = evento.currentTarget.getBoundingClientRect();
-    setRaton({
-      x: (evento.clientX - rect.left) / rect.width,
-      y: (evento.clientY - rect.top) / rect.height,
-    });
-  }
-
-  // Al salir del cartel, todo vuelve al centro
-  function centrarRaton() {
-    setRaton({ x: 0.5, y: 0.4 });
-  }
-
-  // Desplazamiento respecto al centro (-0.5 … 0.5)
-  const dx = raton.x - 0.5;
-  const dy = raton.y - 0.5;
-
-  return (
-    <div className="poster" onMouseMove={moverRaton} onMouseLeave={centrarRaton}>
-      <div
-        className="luz-calida"
-        style={{
-          background: `radial-gradient(circle 280px at ${raton.x * 100}% ${raton.y * 100}%, rgba(255, 190, 110, 0.28), transparent 70%)`,
-        }}
-      />
-
-      <CapaNieve capa={CAPAS_NIEVE[0]} dx={dx} dy={dy} />
-      <CapaNieve capa={CAPAS_NIEVE[1]} dx={dx} dy={dy} />
-
-      <header className="cabecera">
-        <span>Fundación ITACA · L'Hospitalet</span>
-        <span>Navidad solidaria</span>
-      </header>
-
-      <div className="fecha">
-        <span
-          className="fecha__numero fecha__numero--sombra"
-          style={{ transform: `translate(${dx * 40}px, ${dy * 40}px)` }}
-        >
-          21
-        </span>
-        <span
-          className="fecha__numero"
-          style={{ transform: `translate(${dx * -15}px, ${dy * -15}px)` }}
-        >
-          21
-        </span>
-      </div>
-
-      <div className="fecha-texto">
-        <span className="fecha-texto__de">de</span>
-        <span className="fecha-texto__mes">diciembre</span>
-        <span className="fecha-texto__extra">Recogida de regalos</span>
-      </div>
-
-      <h1 className="titulo">
-        <span>Ningún niño</span>
-        <span className="titulo__destacado">sin regalo</span>
-      </h1>
-
-      <p className="pista">pasa el ratón<br />y abre una ilusión ↓</p>
-
-      <div className="colina" />
-
-      <div className="regalos">
-        {REGALOS.map((regalo) => (
-          <Regalo key={regalo.id} regalo={regalo} />
-        ))}
-      </div>
-
-      <p className="mensaje">
-        Con tu donación, un niño o una niña en riesgo de exclusión
-        <strong> abrirá un regalo esta Navidad</strong>. Un pequeño gesto, una gran ilusión.
-      </p>
-
-      <BotonDonar />
-
-      <footer className="pie">
-        <div className="logos">
-          <div className="logo-hueco">Logo<br />Fundación ITACA</div>
-          <div className="logo-hueco">Logo<br />colaborador</div>
-          <div className="logo-hueco">Logo<br />colaborador</div>
-        </div>
-        <p className="pie__info">21.12 · L'Hospitalet de Llobregat</p>
-      </footer>
-
-      <CapaNieve capa={CAPAS_NIEVE[2]} dx={dx} dy={dy} />
-    </div>
-  );
+// Cuando el cursor abandona el cartel, la luz vuelve al regalo
+function devolverFocoAlReposo() {
+  foco.objetivo.x = FOCO.reposo.x;
+  foco.objetivo.y = FOCO.reposo.y;
+  solicitarAnimacion();
 }
 
-function App() {
-  const escala = useEscala();
+/* ---------- 7. Interacción · mouseenter y mouseleave ---------- */
 
-  return (
-    <div
-      className="escenario"
-      style={{ width: POSTER_ANCHO * escala, height: POSTER_ALTO * escala }}
-    >
-      <div className="escalador" style={{ transform: `scale(${escala})` }}>
-        <Poster />
-      </div>
-    </div>
-  );
+// Modifica dos propiedades visuales desde JS: transform (escala) y filter (brillo)
+function encenderElemento(elemento) {
+  elemento.style.transform = `scale(${elemento.dataset.escala})`;
+  elemento.style.filter = BRILLO.encendido;
+  elemento.classList.add("esta-encendido");
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+// Devuelve el elemento a su tamaño y brillo originales
+function apagarElemento(elemento) {
+  elemento.style.transform = "scale(1)";
+  elemento.style.filter = BRILLO.apagado;
+  elemento.classList.remove("esta-encendido");
+}
+
+// mouseenter sobre el regalo: se enciende, se abre y la luz del cartel se expande
+function encenderRegalo() {
+  encenderElemento(regalo);
+  cartel.classList.add("cartel--iluminado");
+  pista.textContent = TEXTO_PISTA.encendido;
+
+  foco.objetivo.radio = FOCO.radioEncendido;
+  solicitarAnimacion();
+}
+
+// mouseleave del regalo: todo vuelve suavemente al estado inicial
+function apagarRegalo() {
+  apagarElemento(regalo);
+  cartel.classList.remove("cartel--iluminado");
+  pista.textContent = TEXTO_PISTA.reposo;
+
+  foco.objetivo.radio = FOCO.radioBase;
+  solicitarAnimacion();
+}
+
+/* ---------- 8. Escalado del cartel ---------- */
+
+// El cartel siempre mide 848 × 1200. Si la ventana es más pequeña se reduce
+// entero con scale(), sin recolocar ni deformar nada.
+function ajustarEscala() {
+  const escala = calcularEscala(window.innerWidth, window.innerHeight);
+
+  escenario.style.width = `${CARTEL.ancho * escala}px`;
+  escenario.style.height = `${CARTEL.alto * escala}px`;
+  cartel.style.transform = `scale(${escala})`;
+}
+
+/* ---------- 9. Inicio ---------- */
+
+function iniciarCartel() {
+  // Interacción 3 · mousemove (y vuelta al reposo al salir del cartel)
+  cartel.addEventListener("mousemove", seguirCursor);
+  cartel.addEventListener("mouseleave", devolverFocoAlReposo);
+
+  // Interacciones 1 y 2 · mouseenter / mouseleave sobre el regalo
+  regalo.addEventListener("mouseenter", encenderRegalo);
+  regalo.addEventListener("mouseleave", apagarRegalo);
+
+  // Las mismas funciones sirven para el botón de donar
+  botonDonar.addEventListener("mouseenter", () => encenderElemento(botonDonar));
+  botonDonar.addEventListener("mouseleave", () => apagarElemento(botonDonar));
+
+  window.addEventListener("resize", ajustarEscala);
+
+  ajustarEscala();
+  pintarFoco();
+  pintarParallax();
+}
+
+iniciarCartel();

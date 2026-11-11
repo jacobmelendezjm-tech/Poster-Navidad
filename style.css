@@ -1,397 +1,588 @@
 /* =========================================================
-   CARTEL INTERACTIVO · 21 DE DICIEMBRE · FUNDACIÓN ITACA
+   FOCO DE ESPERANZA
+   Cartel interactivo · 21 de diciembre · Fundación ITACA
+
+   Índice
+   1. Variables
+   2. Reset
+   3. Página y escalado del cartel
+   4. Capas de luz (foco y contenido revelado)
+   5. Cabecera
+   6. Fecha y tema
+   7. Escena central: el regalo
+   8. Mensaje y botón de donar
+   9. Pie con branding
+
+   Nota: no hay ninguna regla :hover. Los cambios de estado los
+   dispara main.js (estilos en línea y la clase .esta-encendido);
+   aquí solo se definen las transiciones que los suavizan.
    ========================================================= */
 
+/* ---------- 1. Variables ---------- */
 :root {
-  --noche: #0d1b3d;
-  --noche-oscura: #070e24;
-  --oro: #f5b942;
-  --rojo: #ff4d5e;
-  --verde: #2a9d8f;
-  --crema: #fff4e0;
-  --nieve: #f4f7ff;
+  /* Color */
+  --negro: #0a0a0c;
+  --negro-suave: #141417;
+  --blanco: #f6f4ef;
+  --gris: #8f8d89;
+  --gris-claro: #c9c6c0;
+  --naranja: #ff5722;
+  --naranja-claro: #ff8a50;
+  --linea: rgba(246, 244, 239, 0.16);
+
+  /* Tipografía */
+  --fuente-titular: "Montserrat", "Arial Black", Arial, sans-serif;
+  --fuente-tecnica: "JetBrains Mono", Consolas, monospace;
+  --fuente-manuscrita: "Caveat", "Segoe Print", cursive;
+
+  /* Medidas del cartel */
+  --cartel-ancho: 848px;
+  --cartel-alto: 1200px;
+  --margen: 48px;
+
+  /* Movimiento */
+  --salida-suave: cubic-bezier(0.22, 1, 0.36, 1);
+  --salida-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-* {
+/* ---------- 2. Reset ---------- */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
+html,
 body {
-  margin: 0;
-  min-height: 100vh;
+  height: 100%;
+}
+
+svg {
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  list-style: none;
+}
+
+strong {
+  font-weight: inherit;
+}
+
+/* ---------- 3. Página y escalado del cartel ---------- */
+body {
   display: grid;
   place-items: center;
-  background: #04060d;
-  font-family: "DM Sans", sans-serif;
+  overflow: hidden;
+  background: #040405;
+  color: var(--blanco);
+  font-family: var(--fuente-titular);
+  -webkit-font-smoothing: antialiased;
 }
 
-.aviso {
-  color: var(--crema);
-  font-size: 18px;
-  padding: 24px;
-  text-align: center;
-}
-
-/* ---------- Escalado: el cartel siempre mide 848×1200 ---------- */
+/* main.js da al escenario el tamaño del cartel ya escalado */
 .escenario {
   position: relative;
+  width: var(--cartel-ancho);
+  height: var(--cartel-alto);
 }
 
-.escalador {
-  transform-origin: top left;
-}
+.cartel {
+  /* Posición y tamaño del foco: main.js las actualiza en cada mousemove */
+  --foco-x: 424px;
+  --foco-y: 670px;
+  --foco-radio: 300px;
 
-/* ---------- Cartel ---------- */
-.poster {
-  position: relative;
-  width: 848px;
-  height: 1200px;
-  overflow: hidden;
-  color: var(--crema);
-  background: radial-gradient(ellipse at 50% 0%, #1d3a7a 0%, var(--noche) 55%, var(--noche-oscura) 100%);
-}
-
-/* Luz cálida que sigue al cursor (mousemove) */
-.luz-calida {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  mix-blend-mode: screen;
-}
-
-/* ---------- Nieve con profundidad (mousemove) ---------- */
-.nieve {
-  position: absolute;
-  inset: -60px;
-  pointer-events: none;
-  transition: transform 0.3s ease-out;
-}
-
-.nieve--cerca {
-  z-index: 10;
-  filter: blur(1.5px);
-}
-
-.copo {
-  position: absolute;
-  top: -20px;
-  border-radius: 50%;
-  background: var(--nieve);
-  animation-name: caer;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-@keyframes caer {
-  0%   { transform: translate(0, 0); }
-  50%  { transform: translate(18px, 660px); }
-  100% { transform: translate(-6px, 1340px); }
-}
-
-/* ---------- Cabecera ---------- */
-.cabecera {
-  position: absolute;
-  top: 36px;
-  left: 48px;
-  right: 48px;
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 244, 224, 0.25);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-/* ---------- Fecha ---------- */
-.fecha {
-  position: absolute;
-  top: 80px;
-  left: 40px;
-  width: 440px;
-  height: 360px;
-}
-
-.fecha__numero {
   position: absolute;
   top: 0;
   left: 0;
-  font-family: "Anton", sans-serif;
-  font-size: 400px;
-  line-height: 0.9;
-  color: var(--oro);
-  transition: transform 0.3s ease-out;
+  width: var(--cartel-ancho);
+  height: var(--cartel-alto);
+  overflow: hidden;
+  background: radial-gradient(120% 70% at 50% 56%, var(--negro-suave) 0%, var(--negro) 62%);
+  box-shadow: 0 0 0 1px rgba(246, 244, 239, 0.07), 0 30px 80px rgba(0, 0, 0, 0.6);
+  transform-origin: top left; /* main.js aplica scale() si la ventana es pequeña */
 }
 
-.fecha__numero--sombra {
+/* Elementos con parallax: main.js les escribe transform en cada fotograma */
+[data-profundidad] {
+  will-change: transform;
+}
+
+/* ---------- 4. Capas de luz ---------- */
+.foco,
+.revelado {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.foco {
+  background:
+    radial-gradient(circle 110px at var(--foco-x) var(--foco-y),
+      rgba(255, 170, 120, 0.16), transparent 100%),
+    radial-gradient(circle calc(var(--foco-radio) * 1.5) at var(--foco-x) var(--foco-y),
+      rgba(255, 87, 34, 0.32) 0%, rgba(255, 87, 34, 0.11) 42%, transparent 74%);
+}
+
+/* La máscara recorta esta capa con la forma del foco:
+   lo que hay dentro solo existe donde llega la luz */
+.revelado {
+  -webkit-mask-image: radial-gradient(circle var(--foco-radio) at var(--foco-x) var(--foco-y),
+    #000 0%, #000 28%, transparent 100%);
+  mask-image: radial-gradient(circle var(--foco-radio) at var(--foco-x) var(--foco-y),
+    #000 0%, #000 28%, transparent 100%);
+}
+
+.revelado__trama {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(246, 244, 239, 0.55) 1px, transparent 1.6px);
+  background-size: 26px 26px;
+  background-position: 11px 9px;
+  opacity: 0.5;
+}
+
+/* Deseos escritos a mano, escondidos en la oscuridad */
+.deseo {
+  position: absolute;
+  font: 600 36px/1 var(--fuente-manuscrita);
+  color: #ffe6d8;
+  text-shadow: 0 0 18px rgba(255, 87, 34, 0.85);
+  white-space: nowrap;
+}
+
+.deseo--bici    { left: 92px;  top: 552px; rotate: -7deg; }
+.deseo--cuento  { left: 66px;  top: 676px; rotate: 4deg; }
+.deseo--pelota  { left: 104px; top: 792px; rotate: -3deg; }
+.deseo--peluche { left: 622px; top: 546px; rotate: 6deg; }
+.deseo--colores { left: 668px; top: 672px; rotate: -5deg; }
+.deseo--puzle   { left: 626px; top: 790px; rotate: 3deg; }
+.deseo--muneca  { left: 606px; top: 286px; rotate: -4deg; }
+
+/* ---------- 5. Cabecera ---------- */
+.cabecera {
+  position: absolute;
+  top: 36px;
+  left: var(--margen);
+  right: var(--margen);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--linea);
+  font: 500 11.5px/1 var(--fuente-tecnica);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gris);
+}
+
+.cabecera strong {
+  color: var(--blanco);
+}
+
+/* ---------- 6. Fecha y tema ---------- */
+.fecha {
+  position: absolute;
+  top: 39px;
+  left: 38px;
+  display: block;
+}
+
+.fecha__linea {
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+}
+
+/* El "21" gigante. Lo comparten la cifra blanca y su eco naranja */
+.cifra {
+  font: 900 360px/1 var(--fuente-titular);
+  letter-spacing: -0.045em;
+}
+
+/* El eco está justo detrás de la cifra blanca: en reposo no se ve.
+   Asoma cuando el parallax separa las dos capas (se mueven en sentidos opuestos) */
+.fecha__eco {
+  position: absolute;
+  top: 39px;
+  left: 38px;
   color: transparent;
-  -webkit-text-stroke: 2px var(--rojo);
+  -webkit-text-stroke: 2px var(--naranja);
 }
 
-.fecha-texto {
-  position: absolute;
-  top: 190px;
-  right: 48px;
-  text-align: right;
-  font-family: "Anton", sans-serif;
-  text-transform: uppercase;
-  line-height: 0.95;
+.fecha__de {
+  font: 900 76px/1 var(--fuente-titular);
+  letter-spacing: -0.02em;
+  color: var(--naranja);
 }
 
-.fecha-texto__de {
+.fecha__mes {
   display: block;
-  font-size: 56px;
-}
-
-.fecha-texto__mes {
-  display: block;
-  font-size: 76px;
-}
-
-.fecha-texto__extra {
-  display: block;
-  margin-top: 14px;
-  font-family: "DM Sans", sans-serif;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  opacity: 0.85;
-}
-
-/* ---------- Título ---------- */
-.titulo {
-  position: absolute;
-  top: 450px;
-  left: 48px;
-  margin: 0;
-  font-family: "Anton", sans-serif;
-  font-size: 104px;
-  font-weight: 400;
-  line-height: 0.95;
+  margin: -45px 0 0 4px;
+  font: 900 128px/1 var(--fuente-titular);
+  letter-spacing: -0.02em;
   text-transform: uppercase;
 }
 
-.titulo span {
-  display: block;
+.tema {
+  position: absolute;
+  top: 100px;
+  left: 482px;
+  width: 318px;
 }
 
-.titulo__destacado {
-  color: var(--rojo);
+.etiqueta {
+  margin-bottom: 14px;
+  font: 500 11.5px/1.4 var(--fuente-tecnica);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--naranja-claro);
+}
+
+.tema__texto {
+  font: 500 22px/1.28 var(--fuente-titular);
+  color: var(--gris-claro);
+}
+
+.tema__texto strong {
+  font-weight: 800;
+  color: var(--blanco);
+}
+
+/* ---------- 7. Escena central: el regalo ---------- */
+.escena {
+  position: absolute;
+  top: 486px;
+  left: 0;
+  width: 100%;
+  height: 390px;
+}
+
+.regalo-capa {
+  position: absolute;
+  top: 14px;
+  left: 264px;
+  width: 320px;
+  height: 340px;
+}
+
+/* Halo que respira detrás del regalo e invita a acercarse */
+.halo {
+  position: absolute;
+  inset: -70px;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.8s var(--salida-suave);
+}
+
+.halo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 87, 34, 0.42) 0%, rgba(255, 87, 34, 0.1) 45%, transparent 68%);
+  animation: respirar 4.5s ease-in-out infinite;
+}
+
+@keyframes respirar {
+  0%, 100% { transform: scale(0.92); opacity: 0.7; }
+  50%      { transform: scale(1.06); opacity: 1; }
+}
+
+/* Estado inicial del regalo. main.js cambia transform y filter en
+   mouseenter y los devuelve a estos mismos valores en mouseleave.
+
+   Entrada y salida no se mueven igual:
+   - la transición de esta regla se usa al SALIR (lenta, la luz se apaga poco a poco)
+   - la de .esta-encendido se usa al ENTRAR (rápida y con rebote) */
+.regalo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  transform: scale(1);
+  filter: drop-shadow(0 0 0 rgba(255, 87, 34, 0));
+  transition: transform 0.9s var(--salida-suave), filter 1.1s ease;
+}
+
+.regalo.esta-encendido {
+  transition: transform 0.5s var(--salida-rebote), filter 0.35s ease;
+}
+
+.regalo svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.regalo__sombra {
+  fill: rgba(255, 87, 34, 0.22);
+}
+
+.regalo__cara {
+  fill: #111114;
+  stroke: var(--blanco);
+  stroke-width: 3;
+  transition: fill 0.5s ease;
+}
+
+.regalo__cinta,
+.regalo__nudo {
+  fill: var(--naranja);
+}
+
+.regalo__lazo {
+  fill: none;
+  stroke: var(--naranja);
+  stroke-width: 9;
+  stroke-linejoin: round;
+}
+
+.regalo__tapa,
+.regalo__estrella,
+.regalo__rayos {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.regalo__tapa {
+  transition: transform 0.8s var(--salida-suave);
+}
+
+.regalo.esta-encendido .regalo__tapa {
+  transition: transform 0.65s var(--salida-rebote);
+}
+
+.regalo__luz {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.regalo__rayos {
+  opacity: 0;
+  transform: scaleX(0.3);
+  stroke: #ffb08a;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: opacity 0.4s ease, transform 0.7s var(--salida-suave);
+}
+
+.regalo__estrella {
+  fill: #fffaf3;
+  opacity: 0;
+  transform: scale(0) rotate(-90deg);
+  transition: opacity 0.3s ease, transform 0.7s var(--salida-rebote);
+}
+
+.regalo__chispa {
+  fill: #ffd9c4;
+  opacity: 0;
+  transform: scale(0);
+  transition: opacity 0.3s ease, transform 0.5s var(--salida-suave);
+}
+
+/* Estado encendido: la clase la pone y la quita main.js */
+.regalo.esta-encendido .regalo__cara {
+  fill: #2b1209;
+}
+
+.regalo.esta-encendido .regalo__tapa {
+  transform: translateY(-84px) rotate(-7deg);
+}
+
+.regalo.esta-encendido .regalo__chispa {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.3s ease, transform 0.6s var(--salida-rebote);
+}
+
+/* Los destellos aparecen escalonados, no todos a la vez */
+.regalo.esta-encendido g:nth-child(1) > .regalo__chispa { transition-delay: 0.15s; }
+.regalo.esta-encendido g:nth-child(2) > .regalo__chispa { transition-delay: 0.25s; }
+.regalo.esta-encendido g:nth-child(3) > .regalo__chispa { transition-delay: 0.35s; }
+.regalo.esta-encendido g:nth-child(4) > .regalo__chispa { transition-delay: 0.2s; }
+
+.regalo.esta-encendido .regalo__luz {
+  opacity: 1;
+}
+
+.regalo.esta-encendido .regalo__rayos {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.regalo.esta-encendido .regalo__estrella {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.cartel--iluminado .halo {
+  opacity: 1;
+  transform: scale(1.3);
 }
 
 .pista {
   position: absolute;
-  top: 600px;
-  right: 44px;
-  margin: 0;
-  font-family: "Caveat", cursive;
-  font-size: 30px;
-  line-height: 1;
-  text-align: right;
-  color: var(--oro);
-  transform: rotate(-6deg);
-}
-
-/* ---------- Colina de nieve ---------- */
-.colina {
-  position: absolute;
-  top: 880px;
-  left: -80px;
-  width: 1008px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(var(--nieve), #b9c8ea);
-}
-
-/* ---------- Regalos (mouseenter / mouseleave) ---------- */
-.regalos {
-  position: absolute;
+  bottom: 0;
   left: 0;
-  right: 0;
-  bottom: 300px; /* la base de los regalos queda en y = 900px */
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 40px;
-}
-
-.regalo {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.regalo__tapa {
-  position: relative;
-  z-index: 2;
-  height: 34px;
-  border-radius: 4px;
-  background:
-    linear-gradient(90deg,
-      transparent calc(50% - 12px),
-      var(--lazo) calc(50% - 12px),
-      var(--lazo) calc(50% + 12px),
-      transparent calc(50% + 12px)),
-    var(--color);
-  transform-origin: left bottom;
-  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Lazo dibujado con dos lazadas */
-.regalo__tapa::before,
-.regalo__tapa::after {
-  content: "";
-  position: absolute;
-  bottom: calc(100% - 4px);
-  left: 50%;
-  width: 30px;
-  height: 22px;
-  border: 6px solid var(--lazo);
-  border-radius: 50%;
-}
-
-.regalo__tapa::before {
-  transform: translateX(-100%) rotate(-25deg);
-  transform-origin: right bottom;
-}
-
-.regalo__tapa::after {
-  transform: rotate(25deg);
-  transform-origin: left bottom;
-}
-
-.regalo__caja {
-  position: relative;
-  z-index: 1;
-  border-radius: 0 0 6px 6px;
-  background:
-    linear-gradient(90deg,
-      transparent calc(50% - 12px),
-      var(--lazo) calc(50% - 12px),
-      var(--lazo) calc(50% + 12px),
-      transparent calc(50% + 12px)),
-    var(--color);
-  transition: box-shadow 0.3s, filter 0.3s;
-}
-
-.regalo__luz {
-  position: absolute;
-  left: 50%;
-  width: 160%;
-  height: 220px;
-  pointer-events: none;
-  background: radial-gradient(ellipse at 50% 100%, rgba(255, 220, 140, 0.75), transparent 70%);
-  transform: translateX(-50%);
-  transition: opacity 0.35s;
-}
-
-.regalo__contenido {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 45%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  white-space: nowrap;
-  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
-}
-
-.regalo__icono {
-  font-size: 54px;
-  line-height: 1;
-}
-
-.regalo__deseo {
-  margin-top: 6px;
-  font-family: "Caveat", cursive;
-  font-size: 28px;
-  color: var(--crema);
-}
-
-/* ---------- Mensaje + botón ---------- */
-.mensaje {
-  position: absolute;
-  top: 985px;
-  left: 48px;
-  width: 440px;
-  margin: 0;
-  font-size: 20px;
-  line-height: 1.4;
-}
-
-.mensaje strong {
-  color: var(--oro);
-}
-
-.donar-bloque {
-  position: absolute;
-  top: 990px;
-  right: 48px;
-  width: 270px;
-  text-align: center;
-}
-
-.donar {
   width: 100%;
-  height: 64px;
-  border: none;
-  border-radius: 999px;
-  font-family: "Anton", sans-serif;
-  font-size: 24px;
-  letter-spacing: 0.04em;
+  text-align: center;
+  font: 500 11.5px/1 var(--fuente-tecnica);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: transform 0.3s, background 0.3s, color 0.3s;
+  color: var(--gris);
+  transition: color 0.4s ease;
 }
 
-.donar-bloque__info {
-  margin: 10px 0 0;
-  font-size: 14px;
-  opacity: 0.85;
+.cartel--iluminado .pista {
+  color: var(--naranja-claro);
 }
 
-/* ---------- Pie con logos ---------- */
+/* ---------- 8. Mensaje y botón de donar ---------- */
+.lema {
+  position: absolute;
+  top: 896px;
+  left: var(--margen);
+  font: 800 58px/1.05 var(--fuente-titular);
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.lema__linea {
+  display: block;
+}
+
+.lema__acento {
+  color: var(--naranja);
+}
+
+.boton-donar {
+  position: absolute;
+  top: 960px;
+  right: var(--margen);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 30px;
+  border-radius: 999px;
+  background: var(--naranja);
+  color: var(--negro);
+  font: 800 15px/1 var(--fuente-titular);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: scale(1);
+  filter: drop-shadow(0 0 0 rgba(255, 87, 34, 0));
+  transition: transform 0.7s var(--salida-suave), filter 0.9s ease, background-color 0.6s ease;
+}
+
+.boton-donar.esta-encendido {
+  background: var(--naranja-claro);
+  transition: transform 0.4s var(--salida-rebote), filter 0.3s ease, background-color 0.2s ease;
+}
+
+.boton-donar:focus-visible {
+  outline: 2px solid var(--blanco);
+  outline-offset: 4px;
+}
+
+.mensaje__texto {
+  position: absolute;
+  top: 1040px;
+  left: var(--margen);
+  font: 500 16px/1.45 var(--fuente-titular);
+  color: var(--gris-claro);
+  white-space: nowrap;
+}
+
+.mensaje__texto span {
+  display: block;
+}
+
+/* ---------- 9. Pie con branding ---------- */
 .pie {
   position: absolute;
-  bottom: 32px;
-  left: 48px;
-  right: 48px;
+  left: var(--margen);
+  right: var(--margen);
+  bottom: 30px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 244, 224, 0.25);
+  border-top: 1px solid var(--linea);
 }
 
-.logos {
+.marca {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
 }
 
-.logo-hueco {
-  display: grid;
-  place-items: center;
-  width: 120px;
-  height: 48px;
-  border: 1px dashed rgba(255, 244, 224, 0.6);
-  border-radius: 6px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-align: center;
+.marca__simbolo {
+  width: 44px;
+  height: 44px;
+}
+
+.marca__simbolo circle {
+  fill: none;
+  stroke: var(--blanco);
+  stroke-width: 1.5;
+}
+
+.marca__simbolo path {
+  fill: var(--naranja);
+}
+
+.marca__nombre {
+  display: block;
+  font: 900 20px/1 var(--fuente-titular);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  opacity: 0.8;
 }
 
-.pie__info {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
+.marca__nombre span {
+  font-weight: 500;
+}
+
+.marca__lugar {
+  display: block;
+  margin-top: 7px;
+  font: 400 10px/1 var(--fuente-tecnica);
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--gris);
+}
+
+.sellos {
+  display: flex;
+  gap: 28px;
+}
+
+.sello {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 10px/1.4 var(--fuente-tecnica);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gris-claro);
+}
+
+.sello__anillo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid var(--gris-claro);
+  border-radius: 50%;
+  font: 800 13px/1 var(--fuente-titular);
+  letter-spacing: 0;
+  color: var(--blanco);
 }

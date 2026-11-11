@@ -3,30 +3,172 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>21 de diciembre · Fundación ITACA</title>
+  <meta name="description" content="Foco de Esperanza: cartel interactivo de la campaña de Navidad de la Fundación ITACA (L'Hospitalet). 21 de diciembre.">
+  <title>Foco de Esperanza · 21 de diciembre · Fundación ITACA</title>
 
-  <!-- Tipografías -->
+  <!-- Tipografías: Montserrat (titulares), JetBrains Mono (datos) y Caveat (deseos escritos a mano) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
 </head>
 <body>
-  <div id="root"></div>
 
-  <!-- Aviso si se abre con doble clic (file://): Babel necesita un servidor -->
-  <script>
-    if (location.protocol === "file:") {
-      document.getElementById("root").innerHTML =
-        '<p class="aviso">Abre el proyecto con <b>Live Server</b> (clic derecho en index.html → "Open with Live Server").</p>';
-    }
-  </script>
+  <!-- El escenario ocupa el tamaño del cartel ya escalado; el cartel siempre mide 848 × 1200 -->
+  <main class="escenario" id="escenario">
+    <article class="cartel" id="cartel" aria-label="Cartel de la campaña de Navidad de la Fundación ITACA">
 
-  <!-- React 18 + Babel: permite escribir JSX en main.js sin instalar nada -->
-  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
-  <script type="text/babel" src="main.js"></script>
+      <!-- CAPA 1 · Resplandor naranja que sigue al cursor (mousemove) -->
+      <div class="foco" aria-hidden="true"></div>
+
+      <!-- CAPA 2 · Lo que solo se ve cuando lo ilumina el foco -->
+      <div class="revelado" aria-hidden="true">
+        <div class="revelado__trama"></div>
+        <span class="cifra fecha__eco" data-profundidad="-14">21</span>
+        <span class="deseo deseo--bici" data-profundidad="-6">una bici</span>
+        <span class="deseo deseo--cuento" data-profundidad="-10">un cuento</span>
+        <span class="deseo deseo--pelota" data-profundidad="-4">una pelota</span>
+        <span class="deseo deseo--peluche" data-profundidad="-8">un peluche</span>
+        <span class="deseo deseo--colores" data-profundidad="-5">colores</span>
+        <span class="deseo deseo--puzle" data-profundidad="-9">un puzle</span>
+        <span class="deseo deseo--muneca" data-profundidad="-7">una muñeca</span>
+      </div>
+
+      <!-- CAPA 3 · Contenido del cartel -->
+      <header class="cabecera">
+        <p><strong>Fundación ITACA</strong> · L'Hospitalet</p>
+        <p>Foco <span id="lectura-foco">X 0424 · Y 0670</span></p>
+      </header>
+
+      <time class="fecha" datetime="12-21" data-profundidad="16">
+        <span class="fecha__linea">
+          <span class="cifra">21</span>
+          <span class="fecha__de">de</span>
+        </span>
+        <span class="fecha__mes">Diciembre</span>
+      </time>
+
+      <div class="tema" data-profundidad="7">
+        <p class="etiqueta">Campaña solidaria de Navidad</p>
+        <p class="tema__texto">Regalos para <strong>niños y niñas en riesgo de exclusión social.</strong></p>
+      </div>
+
+      <section class="escena" aria-label="Regalo interactivo">
+        <div class="regalo-capa" data-profundidad="-9">
+          <div class="halo" aria-hidden="true"></div>
+
+          <!-- Elemento central: reacciona a mouseenter / mouseleave -->
+          <div class="regalo" id="regalo" data-escala="1.08" role="img" aria-label="Un regalo que se ilumina y se abre al acercar el cursor">
+            <svg viewBox="0 0 320 340" aria-hidden="true" focusable="false">
+              <defs>
+                <radialGradient id="luz-interior" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#ffb38a" stop-opacity="0.95"/>
+                  <stop offset="45%" stop-color="#ff5722" stop-opacity="0.5"/>
+                  <stop offset="100%" stop-color="#ff5722" stop-opacity="0"/>
+                </radialGradient>
+                <radialGradient id="luz-estrella" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff3e6" stop-opacity="0.95"/>
+                  <stop offset="35%" stop-color="#ff8a50" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#ff5722" stop-opacity="0"/>
+                </radialGradient>
+                <path id="destello" d="M0 -10 C1 -3 3 -1 10 0 C3 1 1 3 0 10 C-1 3 -3 1 -10 0 C-3 -1 -1 -3 0 -10 Z"/>
+              </defs>
+
+              <ellipse class="regalo__sombra" cx="160" cy="327" rx="128" ry="9"/>
+
+              <!-- Luz que escapa al abrirse -->
+              <g class="regalo__luz">
+                <ellipse cx="160" cy="132" rx="200" ry="66" fill="url(#luz-interior)"/>
+                <circle cx="160" cy="130" r="78" fill="url(#luz-estrella)"/>
+              </g>
+              <g class="regalo__rayos">
+                <line x1="216" y1="130" x2="352" y2="130"/>
+                <line x1="211" y1="120" x2="337" y2="96"/>
+                <line x1="211" y1="140" x2="337" y2="164"/>
+                <line x1="104" y1="130" x2="-32" y2="130"/>
+                <line x1="109" y1="120" x2="-17" y2="96"/>
+                <line x1="109" y1="140" x2="-17" y2="164"/>
+              </g>
+
+              <!-- Caja -->
+              <g class="regalo__caja">
+                <rect class="regalo__cara" x="50" y="172" width="220" height="150" rx="4"/>
+                <rect class="regalo__cinta" x="50" y="232" width="220" height="30"/>
+                <rect class="regalo__cinta" x="142" y="172" width="36" height="150"/>
+              </g>
+
+              <!-- Tapa con lazo: se levanta al encenderse -->
+              <g class="regalo__tapa">
+                <path class="regalo__lazo" d="M160 124 C140 84 92 80 92 104 C92 124 136 126 160 124 Z"/>
+                <path class="regalo__lazo" d="M160 124 C180 84 228 80 228 104 C228 124 184 126 160 124 Z"/>
+                <rect class="regalo__cara" x="34" y="126" width="252" height="46" rx="4"/>
+                <rect class="regalo__cinta" x="142" y="126" width="36" height="46"/>
+                <rect class="regalo__nudo" x="147" y="110" width="26" height="20" rx="6"/>
+              </g>
+
+              <!-- Estrella que aparece entre la caja y la tapa -->
+              <path class="regalo__estrella" d="M160 90 C164 118 172 126 200 130 C172 134 164 142 160 170 C156 142 148 134 120 130 C148 126 156 118 160 90 Z"/>
+
+              <!-- Destellos que saltan alrededor -->
+              <g class="regalo__chispas">
+                <g transform="translate(6 64) scale(1.5)"><use class="regalo__chispa" href="#destello"/></g>
+                <g transform="translate(312 44)"><use class="regalo__chispa" href="#destello"/></g>
+                <g transform="translate(304 238) scale(1.3)"><use class="regalo__chispa" href="#destello"/></g>
+                <g transform="translate(18 262) scale(0.9)"><use class="regalo__chispa" href="#destello"/></g>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <p class="pista" id="pista">Mueve el cursor · tú llevas la luz</p>
+      </section>
+
+      <section class="mensaje">
+        <h1 class="lema" data-profundidad="8">
+          <span class="lema__linea">Ilumina su Navidad.</span>
+          <span class="lema__linea lema__acento">Dona hoy.</span>
+        </h1>
+
+        <a class="boton-donar" id="boton-donar" data-escala="1.06" href="https://aeitaca.org/" target="_blank" rel="noopener">
+          Quiero donar <span aria-hidden="true">→</span>
+        </a>
+
+        <p class="mensaje__texto">
+          <span>Hay niños y niñas que esta Navidad no esperan ningún regalo.</span>
+          <span>Tu donación se convierte en un juguete, un cuento, una ilusión.</span>
+        </p>
+      </section>
+
+      <!-- Branding. Para usar los logos oficiales, sustituye los bloques por
+           <img src="img/logos/nombre-del-logo.svg" alt="..."> -->
+      <footer class="pie">
+        <div class="marca">
+          <svg class="marca__simbolo" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+            <circle cx="22" cy="22" r="20.5"/>
+            <path d="M22 9 C23.2 18 26 20.8 35 22 C26 23.2 23.2 26 22 35 C20.8 26 18 23.2 9 22 C18 20.8 20.8 18 22 9 Z"/>
+          </svg>
+          <p>
+            <span class="marca__nombre"><span>Fundación</span> ITACA</span>
+            <span class="marca__lugar">L'Hospitalet de Llobregat · aeitaca.org</span>
+          </p>
+        </div>
+
+        <ul class="sellos">
+          <li class="sello">
+            <span class="sello__anillo" aria-hidden="true">21</span>
+            <span>Navidad<br>solidaria</span>
+          </li>
+          <li class="sello">
+            <span class="sello__anillo" aria-hidden="true">L'H</span>
+            <span>Infancia y<br>juventud</span>
+          </li>
+        </ul>
+      </footer>
+
+    </article>
+  </main>
+
 </body>
 </html>
