@@ -1,6 +1,6 @@
 # Ilumina su Navidad
 
-Cartel digital interactivo (848 × 1200 px) para la campaña de Navidad de la **Fundación ITACA** (L'Hospitalet):
+Cartel digital interactivo (848 × 1200 px) para la campaña de Navidad de la **Associació Educativa Itaca** (L'Hospitalet):
 donaciones para comprar regalos a niños y niñas en riesgo de exclusión social. **21 de diciembre.**
 
 Actividad 0612 · THE INTERACTIVE POSTER · Desarrollo web en entorno cliente.
@@ -93,7 +93,20 @@ La cabecera muestra en directo las coordenadas que usa el cartel (`X 0424 · Y 0
 
 Abrir `index.html` en el navegador. No necesita servidor ni instalación; solo conexión para cargar las fuentes de Google Fonts.
 
-## Branding
+## La entidad y el branding
 
-El pie usa un símbolo y unos sellos tipográficos propios. Para poner los logos oficiales, guardar los archivos en
-`img/logos/` y sustituir los bloques del `<footer>` de `index.html` por etiquetas `<img>`.
+El enunciado la llama «Fundación ITACA», pero su nombre oficial es **Associació Educativa Itaca**. Es una
+asociación sin ánimo de lucro de Collblanc-La Torrassa (L’Hospitalet de Llobregat), declarada de utilidad
+pública por la Generalitat de Catalunya. Desde 1977 trabaja en la educación en el tiempo libre de niños,
+niñas, jóvenes y familias. El cartel usa el nombre oficial.
+
+El pie del cartel incluye:
+
+- El **logotipo oficial** (`img/logos/itaca-associacio-educativa.png`, descargado de aeitaca.org). El original es
+  blanco sobre transparente y se imprime en negro con `filter: brightness(0)`, como una tinta más del cartel.
+- La declaración de **utilidad pública** como sello de la entidad.
+- Dirección y contacto: C/ Montseny, 22 · 08903 L’Hospitalet · aeitaca.org · 934 036 997 · @aeitaca.
+
+La estrella enlaza a la página de donativos de la entidad: https://aeitaca.org/haz-un-donativo/
+
+Fuente de toda la información: https://aeitaca.org/

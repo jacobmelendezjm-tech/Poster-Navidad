@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Ilumina su Navidad: cartel interactivo de la campaña de Navidad de la Fundación ITACA (L'Hospitalet). 21 de diciembre.">
-  <title>Ilumina su Navidad · 21 de diciembre · Fundación ITACA</title>
+  <meta name="description" content="Ilumina su Navidad: cartel interactivo de la campaña de Navidad de la Associació Educativa Itaca (L'Hospitalet). 21 de diciembre.">
+  <title>Ilumina su Navidad · 21 de diciembre · Itaca</title>
 
   <!-- Tipografías: Anybody (variable: peso 100–900 y anchura 50–150) e Inter Tight (textos) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,14 +18,14 @@
 
   <!-- El escenario ocupa el tamaño del cartel ya escalado; el cartel siempre mide 848 × 1200 -->
   <main class="escenario" id="escenario">
-    <article class="cartel" id="cartel" aria-label="Cartel de la campaña de Navidad de la Fundación ITACA">
+    <article class="cartel" id="cartel" aria-label="Cartel de la campaña de Navidad de la Associació Educativa Itaca">
 
       <!-- Luz suave que sigue al cursor (mousemove) -->
       <div class="luz" aria-hidden="true"></div>
 
       <!-- Cabecera: información en tres columnas, como en el cartel suizo -->
       <header class="cabecera">
-        <p><strong>Fundación ITACA</strong><br>L'Hospitalet de Llobregat</p>
+        <p><strong>Associació Educativa Itaca</strong><br>Collblanc-La Torrassa<br>L'Hospitalet de Llobregat</p>
         <p>Campaña solidaria de Navidad.<br>Regalos para niños y niñas<br>en riesgo de exclusión social.</p>
         <p class="cabecera__derecha">Pasa el cursor por las letras<br><span id="lectura">X 0424 · Y 0600</span></p>
       </header>
@@ -49,8 +49,8 @@
 
       <!-- Elemento central: estrella de Navidad que es también el botón de donar.
            Reacciona a mouseenter / mouseleave -->
-      <a class="estrella" id="estrella" href="https://aeitaca.org/" target="_blank" rel="noopener"
-         aria-label="Dona un regalo en aeitaca.org">
+      <a class="estrella" id="estrella" href="https://aeitaca.org/haz-un-donativo/" target="_blank" rel="noopener"
+         aria-label="Dona un regalo en la web de Itaca">
         <svg class="estrella__forma" viewBox="-160 -160 320 320" aria-hidden="true" focusable="false">
           <polygon id="estrella-poligono" points="0,-150 40,0 0,150 -40,0"/>
         </svg>
@@ -64,20 +64,15 @@
           Tu donación se convierte en un juguete, un cuento, una ilusión.
         </p>
 
-        <!-- Para usar los logos oficiales, sustituye estos bloques por
-             <img src="img/logos/nombre-del-logo.svg" alt="..."> -->
-        <div class="marcas">
-          <div class="marca">
-            <svg class="marca__simbolo" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
-              <circle cx="22" cy="22" r="20.5"/>
-              <path d="M22 9 C23.2 18 26 20.8 35 22 C26 23.2 23.2 26 22 35 C20.8 26 18 23.2 9 22 C18 20.8 20.8 18 22 9 Z"/>
-            </svg>
-            <p><strong>Fundación ITACA</strong><br>aeitaca.org</p>
+        <!-- Branding: logo oficial e información de la entidad (fuente: aeitaca.org) -->
+        <div class="entidad">
+          <img class="entidad__logo" src="img/logos/itaca-associacio-educativa.png"
+               alt="Logotipo de Itaca, associació educativa" width="867" height="1200">
+          <div class="entidad__datos">
+            <p><strong>Desde 1977</strong> acompañando a la infancia,<br>la juventud y las familias del barrio.</p>
+            <p>Entidad declarada de utilidad pública<br>por la Generalitat de Catalunya.</p>
+            <p>C/ Montseny, 22 · 08903 L'Hospitalet<br>aeitaca.org · 934 036 997 · @aeitaca</p>
           </div>
-          <ul class="sellos">
-            <li class="sello"><span class="sello__anillo" aria-hidden="true">21</span>Navidad<br>solidaria</li>
-            <li class="sello"><span class="sello__anillo" aria-hidden="true">L'H</span>Infancia y<br>juventud</li>
-          </ul>
         </div>
       </footer>
 

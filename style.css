@@ -272,63 +272,31 @@ body {
 }
 
 .pie__mensaje {
-  max-width: 310px;
+  max-width: 290px;
   font: 600 15px/1.3 var(--fuente-texto);
 }
 
-.marcas {
+.entidad {
   display: flex;
-  align-items: center;
-  gap: 24px;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+/* El logo oficial es blanco sobre transparente: se imprime en negro, como una tinta más */
+.entidad__logo {
+  display: block;
+  width: auto;
+  height: 92px;
+  filter: brightness(0);
+}
+
+.entidad__datos {
+  display: grid;
+  gap: 5px;
+  font: 600 11px/1.25 var(--fuente-texto);
   white-space: nowrap;
 }
 
-.marca {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 600 12px/1.25 var(--fuente-texto);
-}
-
-.marca strong {
-  font-size: 15px;
-  text-transform: uppercase;
-}
-
-.marca__simbolo {
-  width: 42px;
-  height: 42px;
-}
-
-.marca__simbolo circle {
-  fill: none;
-  stroke: var(--tinta);
-  stroke-width: 2;
-}
-
-.marca__simbolo path {
-  fill: var(--tinta);
-}
-
-.sellos {
-  display: flex;
-  gap: 16px;
-}
-
-.sello {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font: 600 11px/1.2 var(--fuente-texto);
-  text-transform: uppercase;
-}
-
-.sello__anillo {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--tinta);
-  border-radius: 50%;
-  font: 800 12px/1 var(--fuente-texto);
+.entidad__datos strong {
+  font-weight: 800;
 }
