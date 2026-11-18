@@ -9,8 +9,10 @@
    4. Luz que sigue al cursor
    5. Cabecera
    6. Tipografía cinética
+   6b. Escena: las dos Navidades
    7. Estrella (botón de donar)
    8. Pie con mensaje y branding
+   9. Movimiento reducido
 
    Nota: no hay ninguna regla :hover. Los cambios de estado los
    dispara main.js (estilos en línea y la clase .esta-encendida);
@@ -19,11 +21,14 @@
 
 /* ---------- 1. Variables ---------- */
 :root {
-  /* Color: tres tintas planas, como un cartel serigrafiado */
-  --naranja: #ff5722;
+  /* Color: dos Navidades. Rojo cálido y oro frente a azul noche y gris */
+  --rojo: #9e1426;
+  --rojo-oscuro: #4a0811;
+  --noche: #0b0d12;
   --tinta: #111111;
   --crema: #fff1e6;
-  --rosa: #ffb3d1;
+  --dorado: #ffd166;
+  --gris-frio: #8a93a6;
 
   /* Tipografía */
   --fuente-display: "Anybody", "Arial Narrow", Arial, sans-serif;
@@ -80,7 +85,7 @@ body {
   place-items: center;
   overflow: hidden;
   background: #1a1a1a;
-  color: var(--tinta);
+  color: var(--crema);
   font-family: var(--fuente-texto);
   -webkit-font-smoothing: antialiased;
 }
@@ -93,36 +98,37 @@ body {
 }
 
 .cartel {
-  /* Posición de la luz: main.js las actualiza en cada mousemove */
-  --luz-x: 424px;
-  --luz-y: 600px;
-  --luz-opacidad: 0;
-
   position: absolute;
   top: 0;
   left: 0;
   width: var(--cartel-ancho);
   height: var(--cartel-alto);
   overflow: hidden;
-  background: var(--naranja);
+  background: var(--noche);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
   transform-origin: top left; /* main.js aplica scale() si la ventana es pequeña */
 }
 
 /* ---------- 4. Luz que sigue al cursor ---------- */
+/* Un círculo fijo que main.js desplaza con transform y opacity:
+   las dos propiedades más baratas de animar (no repintan nada) */
 .luz {
   position: absolute;
-  inset: 0;
+  top: -340px;
+  left: -340px;
+  width: 680px;
+  height: 680px;
   pointer-events: none;
-  opacity: var(--luz-opacidad);
-  background: radial-gradient(circle 340px at var(--luz-x) var(--luz-y),
-    rgba(255, 196, 160, 0.7) 0%, rgba(255, 150, 100, 0.25) 45%, transparent 100%);
+  opacity: 0;
+  will-change: transform, opacity;
+  background: radial-gradient(circle closest-side,
+    rgba(255, 209, 102, 0.22) 0%, rgba(255, 209, 102, 0.08) 45%, transparent 100%);
 }
 
 /* ---------- 5. Cabecera ---------- */
 .cabecera {
   position: absolute;
-  top: 34px;
+  top: 46px;
   left: var(--margen);
   right: var(--margen);
   display: grid;
@@ -141,8 +147,9 @@ body {
 
 /* ---------- 6. Tipografía cinética ---------- */
 .tipografia {
+  will-change: transform;
   position: absolute;
-  top: 124px;
+  top: 112px;
   left: var(--margen);
   pointer-events: none; /* los eventos los recibe el cartel, no cada letra */
   opacity: 0;
@@ -177,8 +184,11 @@ body {
 }
 
 .letra {
+  --sombra: #5e0a16;
   display: block;
-  color: var(--tinta);
+  color: var(--crema);
+  /* Relieve 3D: la letra se extruye hacia abajo a la derecha */
+  text-shadow: 2px 2px 0 var(--sombra), 4px 4px 0 var(--sombra), 6px 6px 0 var(--sombra);
 }
 
 .letra--espacio {
@@ -203,16 +213,178 @@ body {
   text-transform: uppercase;
 }
 
+/* ---------- 6b. Escena: las dos Navidades ---------- */
+/* Izquierda, la Navidad con regalos; derecha, la misma sin ellos.
+   main.js mueve el círculo de la máscara #mascara-luz con el cursor. */
+.escena {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--cartel-ancho);
+  height: var(--cartel-alto);
+  pointer-events: none;
+}
+
+.escena svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  will-change: transform; /* capa propia: no se redibuja cuando cambian las letras */
+}
+
+/* Capa iluminada: solo se ve dentro del círculo que main.js mueve */
+.escena .escena__luz {
+  left: 424px;
+  width: 424px;
+  /* main.js escribe aquí la máscara: un círculo que sigue al cursor */
+  -webkit-mask-image: radial-gradient(circle 0px at 0 0, #000 55%, transparent 100%);
+  mask-image: radial-gradient(circle 0px at 0 0, #000 55%, transparent 100%);
+}
+
+.escena__franja {
+  position: absolute;
+  top: 1036px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #101217;
+}
+
+.escena__etiquetas {
+  position: absolute;
+  top: 448px;
+  left: var(--margen);
+  right: var(--margen);
+  display: flex;
+  justify-content: space-between;
+  font: 800 13px/1 var(--fuente-texto);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.escena__etiqueta--triste {
+  color: var(--gris-frio);
+}
+
+/* Mientras el cursor está sobre la estrella, el lado oscuro se enciende
+   y su etiqueta cambia: "Sin ella" pasa a "Con la tuya" */
+.escena__etiqueta--triste {
+  position: relative;
+  text-align: right;
+}
+
+.etiqueta-sin,
+.etiqueta-con {
+  transition: opacity 0.9s ease;
+}
+
+.etiqueta-con {
+  position: absolute;
+  right: 0;
+  top: 0;
+  white-space: nowrap;
+  color: var(--crema);
+  opacity: 0;
+}
+
+.cartel.esta-donando .etiqueta-sin {
+  opacity: 0;
+}
+
+.cartel.esta-donando .etiqueta-con {
+  opacity: 1;
+  transition-delay: 0.4s;
+}
+
+/* Las luces del árbol feliz parpadean, cada una a su ritmo */
+/* Parpadeo a saltos (steps): la escena solo se redibuja unas veces por segundo */
+.bombilla {
+  animation: parpadear 1.6s steps(2, jump-none) infinite alternate;
+  animation-delay: var(--retardo, 0s);
+}
+
+@keyframes parpadear {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+
+/* Nieve fría que cae sobre el lado oscuro (capa HTML: se mueve sin redibujar) */
+.nieve {
+  position: absolute;
+  top: 0;
+  width: 424px;
+  height: 1036px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.nieve--feliz {
+  left: 0;
+  --nieve: #ffffff;
+}
+
+.nieve--triste {
+  left: 424px;
+  --nieve: #b9c2d3;
+}
+
+.nieve--feliz .copo {
+  background: #ffffff;
+}
+
+/* Manto de nieve acumulada: main.js le sube la altura cada vez que cae un copo */
+.nieve__manto {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: linear-gradient(var(--nieve), color-mix(in srgb, var(--nieve) 80%, #000));
+}
+
+/* Bordes redondeados en la superficie, como montoncitos de nieve */
+.nieve__manto::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 9px;
+  background: radial-gradient(circle at 12px 9px, var(--nieve) 9px, transparent 9.5px) 0 0 / 24px 9px repeat-x;
+}
+
+.nieve__manto[style*="height: 0"]::before {
+  display: none;
+}
+
+.copo {
+  position: absolute;
+  top: 0;
+  border-radius: 50%;
+  background: var(--gris-frio);
+  opacity: 0.8;
+  will-change: transform;
+  animation: caer var(--duracion, 10s) linear infinite;
+  animation-delay: var(--retardo, 0s);
+}
+
+@keyframes caer {
+  from { transform: translateY(-10px); }
+  to { transform: translateY(1036px); } /* llega al suelo justo al final de cada vuelta */
+}
+
 /* ---------- 7. Estrella (botón de donar) ---------- */
 /* Estado inicial. main.js cambia transform y el relleno del polígono en
    mouseenter y los devuelve a estos valores en mouseleave.
    Entrada rápida con rebote; salida más lenta y suave. */
 .estrella {
   position: absolute;
-  top: 562px;
-  left: 488px;
-  width: 316px;
-  height: 316px;
+  top: 418px;  /* encima del árbol seco: es la estrella que le falta */
+  left: 551px;
+  width: 170px;
+  height: 170px;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -233,8 +405,12 @@ body {
   animation: girar 40s linear infinite;
 }
 
+.estrella__forma .estrella__canto {
+  fill: #a8730c; /* canto: da volumen sin filtros caros */
+}
+
 .estrella__forma polygon {
-  fill: var(--rosa);
+  fill: var(--dorado);
   transition: fill 0.6s ease;
 }
 
@@ -244,7 +420,7 @@ body {
 
 .estrella__texto {
   position: relative;
-  font: 800 27px/1 var(--fuente-texto);
+  font: 800 17px/1.05 var(--fuente-texto);
   letter-spacing: -0.01em;
   text-align: center;
   text-transform: uppercase;
@@ -252,7 +428,7 @@ body {
 }
 
 .estrella:focus-visible {
-  outline: 3px solid var(--tinta);
+  outline: 3px solid var(--crema);
   outline-offset: 6px;
   border-radius: 50%;
 }
@@ -262,13 +438,13 @@ body {
   position: absolute;
   left: var(--margen);
   right: var(--margen);
-  bottom: 34px;
+  bottom: 44px;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   gap: 40px;
-  padding-top: 16px;
-  border-top: 2px solid var(--tinta);
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 241, 230, 0.25);
 }
 
 .pie__mensaje {
@@ -282,12 +458,11 @@ body {
   gap: 18px;
 }
 
-/* El logo oficial es blanco sobre transparente: se imprime en negro, como una tinta más */
+/* El logo oficial es blanco sobre transparente: sobre el lado oscuro se usa tal cual */
 .entidad__logo {
   display: block;
   width: auto;
-  height: 92px;
-  filter: brightness(0);
+  height: 76px;
 }
 
 .entidad__datos {
@@ -299,4 +474,413 @@ body {
 
 .entidad__datos strong {
   font-weight: 800;
+}
+
+/* Con toda la Navidad encendida, el pie derecho queda sobre nieve: tinta oscura */
+.entidad {
+  transition: color 0.6s ease;
+}
+
+/* Créditos: autor del cartel y centro de estudios */
+.creditos {
+  position: absolute;
+  left: var(--margen);
+  right: var(--margen);
+  bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: 500 11px/1 var(--fuente-texto);
+  color: rgba(255, 241, 230, 0.7);
+}
+
+.creditos strong {
+  color: var(--crema);
+}
+
+.creditos__logo {
+  display: block;
+  width: auto;
+  height: 17px;
+}
+
+/* ---------- Elementos 3D ---------- */
+
+/* Regalos que caen girando y se apilan: cubos de CSS 3D.
+   main.js los crea, los mueve (transform) y los posa al aterrizar */
+.lluvia {
+  position: absolute;
+  top: 0;
+  width: 424px;
+  height: 1036px; /* se detienen en la franja del pie */
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 700px;
+}
+
+.lluvia--feliz {
+  left: 0;
+}
+
+.lluvia--triste {
+  left: 424px;
+}
+
+.regalo3d {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--t);
+  height: var(--t);
+  transform-style: preserve-3d;
+  will-change: transform;
+  pointer-events: auto; /* se puede hacer click: estalla en confeti */
+  cursor: pointer;
+}
+
+/* Capa de confeti y fuegos artificiales, por encima de todo */
+.fuegos {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Al aterrizar deja de girar y se queda posado, enseñando la tapa */
+.regalo3d.aterrizado .regalo3d__cubo {
+  animation: none;
+  transform: rotateX(-24deg) rotateY(var(--posado, 35deg));
+  transition: transform 0.25s ease-out;
+}
+
+.regalo3d__cubo {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: girar-3d var(--giro) linear infinite;
+}
+
+.regalo3d__cara {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 42%, var(--cinta) 42% 58%, transparent 58%),
+    linear-gradient(0deg, transparent 42%, var(--cinta) 42% 58%, transparent 58%),
+    var(--color);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* Cada cara se coloca en su sitio y recibe más o menos luz */
+.regalo3d__cara:nth-child(1) { transform: translateZ(calc(var(--t) / 2)); }
+.regalo3d__cara:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--t) / 2)); filter: brightness(0.6); }
+.regalo3d__cara:nth-child(3) { transform: rotateY(90deg) translateZ(calc(var(--t) / 2)); filter: brightness(0.78); }
+.regalo3d__cara:nth-child(4) { transform: rotateY(-90deg) translateZ(calc(var(--t) / 2)); filter: brightness(0.9); }
+.regalo3d__cara:nth-child(5) { transform: rotateX(90deg) translateZ(calc(var(--t) / 2)); filter: brightness(1.15); }
+.regalo3d__cara:nth-child(6) { transform: rotateX(-90deg) translateZ(calc(var(--t) / 2)); filter: brightness(0.55); }
+
+@keyframes girar-3d {
+  from { transform: rotateX(-20deg) rotateY(0deg) rotateZ(8deg); }
+  to { transform: rotateX(340deg) rotateY(360deg) rotateZ(368deg); }
+}
+
+/* ---------- Niños que saltan y lanzan su regalo ----------
+   main.js añade .saltando cuando el cursor pasa por encima de un niño.
+   El cuerpo se agacha, salta y aterriza; el regalo sube girando y
+   vuelve a sus manos cuando ya ha aterrizado. */
+.nino__cuerpo,
+.nino__regalo {
+  transform-box: fill-box;
+}
+
+.nino__cuerpo {
+  transform-origin: 50% 100%;
+}
+
+.nino__regalo {
+  transform-origin: 50% 50%;
+}
+
+.nino.saltando .nino__cuerpo {
+  animation: saltar 1.1s ease-in-out;
+}
+
+.nino.saltando .nino__regalo {
+  animation: lanzar-regalo 1.1s ease-in-out;
+}
+
+@keyframes saltar {
+  0%   { transform: translateY(0) scaleY(1); }
+  12%  { transform: translateY(0) scaleY(0.9); }
+  32%  { transform: translateY(-30px) scaleY(1.05); }
+  50%  { transform: translateY(0) scaleY(0.93); }
+  60%  { transform: translateY(0) scaleY(1); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes lanzar-regalo {
+  0%, 22% { transform: translateY(0) rotate(0deg); }
+  56%     { transform: translateY(-120px) rotate(200deg); }
+  84%     { transform: translateY(0) rotate(360deg); }
+  90%     { transform: translateY(4px) rotate(360deg); }
+  100%    { transform: translateY(0) rotate(360deg); }
+}
+
+/* ---------- Niños tristes que se levantan felices ----------
+   main.js añade .feliz al pasar el cursor por encima (o al donar).
+   Todo son transiciones, así que al quitar la clase se vuelven a
+   sentar despacio, en orden inverso. */
+.cambia .c-abrigo   { fill: var(--abrigo-t);   transition: fill 0.9s ease; }
+.cambia .c-piel     { fill: var(--piel-t);     transition: fill 0.9s ease, transform 0.7s var(--salida-rebote); }
+.cambia .c-gorro    { fill: var(--gorro-t);    transition: fill 0.9s ease; }
+.cambia .c-banda    { fill: var(--banda-t);    transition: fill 0.9s ease; }
+.cambia .c-bufanda  { fill: var(--bufanda-t);  transition: fill 0.9s ease; }
+
+.cambia.feliz .c-abrigo  { fill: var(--abrigo-f); }
+.cambia.feliz .c-piel    { fill: var(--piel-f); }
+.cambia.feliz .c-gorro   { fill: var(--gorro-f); }
+.cambia.feliz .c-banda   { fill: var(--banda-f); }
+.cambia.feliz .c-bufanda { fill: var(--bufanda-f); }
+
+/* Brazos: de abrazarse las rodillas a sujetar el regalo (se interpola el trazado) */
+.cambia .c-brazos {
+  stroke: var(--abrigo-t);
+  d: path("M-22 -66 Q-36 -44 -9 -39 M22 -66 Q36 -44 9 -39");
+  transition: stroke 0.9s ease, d 0.7s var(--salida-rebote);
+}
+
+.cambia.feliz .c-brazos {
+  stroke: var(--abrigo-f);
+  d: path("M-23 -67 Q-36 -52 -25 -42 M23 -67 Q36 -52 25 -42");
+}
+
+.cambia.feliz .cambia__mano--i { transform: translate(-18px, -1px); }
+.cambia.feliz .cambia__mano--d { transform: translate(16px, -1px); }
+
+/* El cuerpo sube con un pequeño rebote */
+.cambia__torso {
+  transition: transform 0.7s var(--salida-rebote);
+}
+
+.cambia.feliz .cambia__torso {
+  transform: translateY(-28px);
+}
+
+/* Las piernas de sentado se desvanecen y las de pie crecen desde el suelo */
+.cambia__sentado {
+  transition: opacity 0.3s ease 0.1s;
+}
+
+.cambia.feliz .cambia__sentado {
+  opacity: 0;
+}
+
+.cambia__pie {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transform: scaleY(0.2);
+  opacity: 0;
+  transition: transform 0.7s var(--salida-rebote), opacity 0.2s ease;
+}
+
+.cambia.feliz .cambia__pie {
+  transform: scaleY(1);
+  opacity: 1;
+}
+
+/* La cabeza deja de estar agachada */
+.cambia__cabeza {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transform: rotate(var(--inclinacion));
+  transition: transform 0.7s var(--salida-suave);
+}
+
+.cambia.feliz .cambia__cabeza {
+  transform: rotate(0deg);
+}
+
+/* Cara: la tristeza se va y llega la sonrisa */
+.cambia__cara-triste {
+  transition: opacity 0.3s ease;
+}
+
+.cambia__cara-feliz {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cambia.feliz .cambia__cara-triste {
+  opacity: 0;
+}
+
+.cambia.feliz .cambia__cara-feliz {
+  opacity: 1;
+  transition-delay: 0.25s;
+}
+
+/* Un regalo cae del cielo a sus manos */
+.cambia__regalo {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: translateY(-140px) rotate(-200deg) scale(0.6);
+  opacity: 0;
+  transition: transform 0.35s ease-in, opacity 0.2s ease;
+}
+
+.cambia.feliz .cambia__regalo {
+  transform: none;
+  opacity: 1;
+  transition: transform 0.65s cubic-bezier(0.3, 0, 0.5, 1.35) 0.35s, opacity 0.2s ease 0.35s;
+}
+
+/* ---------- Muy tristes: al quitar el cursor de la estrella ----------
+   Se sientan, bajan aún más la cabeza, sollozan y lloran. Las animaciones
+   solo corren en este estado, para no gastar mientras no se ven. */
+.cambia__boca {
+  transition: opacity 0.3s ease;
+}
+
+.cambia__llanto {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.cambia.muy-triste:not(.feliz) .cambia__llanto {
+  opacity: 1;
+  transition-delay: 0.4s;
+}
+
+.cambia.muy-triste:not(.feliz) .cambia__boca,
+.cambia.muy-triste:not(.feliz) .cambia__lagrima {
+  opacity: 0;
+}
+
+.cambia.muy-triste:not(.feliz) .cambia__cabeza {
+  transform: rotate(calc(var(--inclinacion) * 2.2)) translateY(5px);
+}
+
+.cambia.muy-triste:not(.feliz) .cambia__torso {
+  animation: sollozar 0.55s ease-in-out 0.5s infinite alternate;
+}
+
+.lagrima {
+  transform-box: fill-box;
+  opacity: 0;
+}
+
+.cambia.muy-triste:not(.feliz) .lagrima {
+  animation: llorar 1.1s ease-in infinite;
+}
+
+.cambia.muy-triste:not(.feliz) .lagrima--2 { animation-delay: 0.3s; }
+.cambia.muy-triste:not(.feliz) .lagrima--3 { animation-delay: 0.55s; }
+.cambia.muy-triste:not(.feliz) .lagrima--4 { animation-delay: 0.85s; }
+
+@keyframes sollozar {
+  from { transform: translateY(0); }
+  to   { transform: translateY(2.5px); }
+}
+
+@keyframes llorar {
+  0%   { transform: translateY(0); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translateY(18px); opacity: 0; }
+}
+
+/* ---------- Regalos congelados (lado oscuro sin donación) ----------
+   Se paran donde estén, dejan de girar y se cubren de hielo. */
+.lluvia--triste.congelada .regalo3d__cubo {
+  animation-play-state: paused;
+}
+
+.lluvia--triste.congelada .regalo3d {
+  pointer-events: none;
+  cursor: default;
+}
+
+.regalo3d__cara::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(235, 246, 255, 0.85) 0%, rgba(170, 205, 235, 0.55) 45%, rgba(120, 160, 205, 0.7) 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+.lluvia--triste.congelada .regalo3d__cara::after {
+  opacity: 1;
+}
+
+/* ---------- Caravana: los niños felices llevan la Navidad al lado oscuro ----------
+   Cada pieza (el árbol y cada niño) es un SVG en su propio <div>: se mueve con
+   transform, sin redibujar la escena. --viaje: cuánto se desplaza al donar. */
+.escena .caravana__pieza {
+  position: absolute;
+  will-change: transform;
+  transition: transform 2.4s cubic-bezier(0.45, 0, 0.35, 1);
+}
+
+.escena .caravana__pieza svg {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.cartel.caravana-fuera .caravana__pieza {
+  transform: translateX(var(--viaje));
+}
+
+/* Mientras corren: los niños botan a cada paso y el árbol va en volandas */
+.cartel.caravana-corriendo .caravana__pieza--nino svg {
+  transform-origin: 50% 100%;
+  animation: correr 0.3s ease-in-out infinite alternate;
+  animation-delay: var(--paso, 0s);
+}
+
+.cartel.caravana-corriendo .caravana__pieza--arbol svg {
+  transform-origin: 50% 100%;
+  animation: cargar-arbol 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes correr {
+  from { transform: translateY(0) rotate(-3deg); }
+  to   { transform: translateY(-9px) rotate(3deg); }
+}
+
+@keyframes cargar-arbol {
+  from { transform: translateY(-16px) rotate(-1.2deg); }
+  to   { transform: translateY(-22px) rotate(1.2deg); }
+}
+
+/* Destellos dorados del cielo feliz */
+.bombilla[d] {
+  animation-duration: 2.2s;
+}
+
+/* ---------- 9. Movimiento reducido ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .bombilla,
+  .copo,
+  .regalo3d__cubo,
+  .nino__cuerpo,
+  .nino__regalo,
+  .cambia *,
+  .estrella__forma {
+    animation: none;
+  }
+
+  .cambia *,
+  .escena .caravana__pieza {
+    transition-duration: 0.01s !important;
+    transition-delay: 0s !important;
+  }
+
+  .cartel.caravana-corriendo .caravana__pieza svg {
+    animation: none;
+  }
 }
