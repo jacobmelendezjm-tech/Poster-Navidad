@@ -1,915 +1,2142 @@
 /* =========================================================
-   ILUMINA SU NAVIDAD
-   Cartel interactivo · 21 de diciembre · Fundación ITACA
+   ILUMINA SU NAVIDAD · versión 3D realista (Three.js + cannon-es)
+   Cartel interactivo · 21 de diciembre · Associació Educativa Itaca
+
+   Dos Navidades, una al lado de la otra, en un mundo 3D:
+   a la izquierda, un pueblo navideño con su abeto y niños felices;
+   a la derecha, el mismo pueblo a oscuras, un árbol seco y niños
+   tristes. El cursor es una luz cálida; al donar, los niños felices
+   cargan el árbol y los regalos y se los llevan a los tristes.
+
+   Realismo:
+   - Luz de entorno con un HDRI nocturno real (Poly Haven, CC0).
+   - Texturas fotográficas PBR (Poly Haven, CC0): nieve, ladrillo,
+     tejas y madera, con mapa de relieve y de rugosidad.
+   - Modelos reales (Poly Haven, CC0): farolas, farol y caja de cartón.
+   - Abetos hechos de ramas con agujas, nieve en las puntas y sombras.
+   - Física real (cannon-es) para los regalos: caen, chocan y se apilan.
+   - Brillo (bloom), niebla y sombras suaves.
 
    Índice
-   1. Configuración
-   2. Referencias al DOM
-   3. Estado
-   4. Cálculos (funciones puras)
-   5. Preparación de la tipografía
-   6. Pintado y bucle de animación
-   7. Interacción · mousemove
-   8. Interacción · mouseenter y mouseleave
-   9. Escalado del cartel
-   10. Inicio
+   1.  Configuración y utilidades
+   2.  Referencias al DOM y estado
+   3.  Motor 3D: renderizador, cámara, luces, brillo y entorno
+   4.  Texturas: fotográficas (PBR) y dibujadas (cielo, agujas, tela…)
+   5.  Materiales que se calientan al donar
+   6.  Piezas: regalos, casas, abetos, árbol seco, farolas
+   7.  Niños (felices y tristes que se levantan)
+   8.  El mundo: cielo, suelo, pueblos, árboles, niños
+   9.  Lema 3D y estrella de donar
+   10. Santa Claus en su trineo
+   11. Física: regalos que caen, se apilan, se congelan y estallan
+   12. Nieve que cae y se acumula
+   13. Confeti y fuegos artificiales
+   14. Interacción: cursor, toque, donar, click
+   15. Bucle de animación
+   16. Escalado e inicio
    ========================================================= */
 
-"use strict";
+import * as THREE from "three";
+import * as CANNON from "cannon-es";
+import { FontLoader } from "three/addons/loaders/FontLoader.js";
+import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
-/* ---------- 1. Configuración ---------- */
+/* ---------- 1. Configuración y utilidades ---------- */
 
-const CARTEL = {
-  ancho: 848,
-  alto: 1200,
-  margenVentana: 32, // aire mínimo entre el cartel y el borde de la ventana
-};
-
-// Tipografía cinética: cerca del cursor las letras pierden peso y se iluminan
-const TIPO = {
-  pesoMax: 900,     // peso de las letras en reposo (Anybody Black)
-  pesoMin: 140,     // peso de una letra justo debajo del cursor
-  anchura: 72,      // eje "wdth" fijo de la fuente variable (condensada: letras más altas)
-  radio: 240,       // distancia (px del cartel) a la que llega la influencia del cursor
-  suavizado: 0.16,  // 0 = no se mueve, 1 = reacciona sin inercia
-};
-
-const COLOR = {
-  crema: [255, 241, 230],   // letras del lado feliz
-  apagado: [74, 79, 92],    // letras del lado oscuro, sin luz
-  dorado: [255, 209, 102],  // cualquier letra bajo el cursor
-};
-
+const CARTEL = { ancho: 848, alto: 1200, margenVentana: 32 };
 const MITAD = 424;
+const FOV = 35;
+const D = 6 / Math.tan(THREE.MathUtils.degToRad(FOV / 2)); // el plano z=0 mide 848×1200 px
+const SUELO = -4;
 
-// Relieve 3D del lema: color de la extrusión de cada lado
-const SOMBRA = {
-  feliz: [94, 10, 22],
-  oscura: [5, 6, 8],
+const RUTA = "assets/";
+const FUENTE_3D = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json";
+
+const C = {
+  crema: "#fff1e6", rojo: "#c8102e", oro: "#ffd166", rosa: "#f4a6c0", azul: "#3f7fd9",
+  verde: "#1f6b3a", teal: "#23867a", morado: "#9b5de5", naranja: "#f08a3c", fucsia: "#e8508f",
 };
 
-// Paralaje 3D: el punto de vista de los regalos que caen sigue al cursor.
-// Solo cambia la perspectiva de esas capas decorativas: el cartel no se mueve,
-// así el cursor siempre coincide con lo que se ve.
-const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches; // x donde termina la Navidad feliz y empieza la oscura
+const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esMovil = window.matchMedia("(hover: none) and (pointer: coarse)").matches || window.innerWidth < 600;
 
-const ESTRELLA = {
-  puntas: 14,
-  radioExterior: 150,
-  radioInterior: 122,
-  reposo: { transform: "scale(1) rotate(0deg)", relleno: "#ffd166" },
-  encendida: { transform: "scale(1.14) rotate(-12deg)", relleno: "#fff1e6" },
-};
+const azar = (min, max) => min + Math.random() * (max - min);
+const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
+const lerp = THREE.MathUtils.lerp;
+const limitar = THREE.MathUtils.clamp;
+const suave = (t) => t * t * (3 - 2 * t);
 
-const REPOSO_LUZ = { x: 424, y: 600 };
+// Ruido suave (valor) para dunas de nieve y nubes
+function ruido2(x, y) {
+  const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+function ruidoSuave(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const a = ruido2(ix, iy), b = ruido2(ix + 1, iy), c = ruido2(ix, iy + 1), d = ruido2(ix + 1, iy + 1);
+  const ux = suave(fx), uy = suave(fy);
+  return lerp(lerp(a, b, ux), lerp(c, d, ux), uy);
+}
+function fbm(x, y) {
+  let v = 0, a = 0.5;
+  for (let i = 0; i < 4; i++) { v += a * ruidoSuave(x, y); x *= 2.03; y *= 2.03; a *= 0.5; }
+  return v;
+}
 
-// Círculo de luz que enciende el lado oscuro de la escena
-const LUZ_ESCENA = {
-  radio: 190,        // radio con el cursor encima
-  radioDonando: 1400, // radio con el cursor sobre la estrella: se enciende todo el lado
-  suavizadoDonando: 0.02, // al donar la luz se abre despacio, como un amanecer
-};
+// Posición del mundo que, vista desde la cámara, cae en el píxel (px, py) a la profundidad z
+function enPantalla(px, py, z = 0) {
+  const k = (D - z) / D;
+  return new THREE.Vector3(((px - MITAD) / 100) * k, ((600 - py) / 100) * k, z);
+}
 
-/* ---------- 2. Referencias al DOM ---------- */
+const _proyeccion = new THREE.Vector3();
+function aPixeles(vector) {
+  _proyeccion.copy(vector).project(camara);
+  return { x: (_proyeccion.x + 1) * 0.5 * CARTEL.ancho, y: (1 - _proyeccion.y) * 0.5 * CARTEL.alto };
+}
+
+/* ---------- 2. Referencias al DOM y estado ---------- */
 
 const escenario = document.getElementById("escenario");
 const cartel = document.getElementById("cartel");
-const tipografia = document.getElementById("tipografia");
-const estrella = document.getElementById("estrella");
-const poligonoEstrella = document.getElementById("estrella-poligono");
-const lectura = document.getElementById("lectura");
-const capaLuz = document.getElementById("escena-luz");
-const halo = document.querySelector(".luz");
-const capasLluvia = Array.from(document.querySelectorAll(".lluvia"));
-const cantoEstrella = document.getElementById("estrella-canto");
-const filas = Array.from(document.querySelectorAll(".fila"));
+const lienzo = document.getElementById("mundo");
+const botonDonar = document.getElementById("donar");
+const avisoTexto = document.getElementById("aviso-texto");
 
-/* ---------- 3. Estado ---------- */
+const raton = { x: MITAD, y: 600, dentro: false };
+const luzCursor = { x: MITAD, y: 600, intensidad: 0, objetivo: 0 };
 
-// Cada letra guarda su centro (en coordenadas del cartel) y su influencia actual
-let letras = [];
-
-const raton = {
-  x: REPOSO_LUZ.x,
-  y: REPOSO_LUZ.y,
-  dentro: false,
-};
-
-// La luz persigue al ratón con inercia: "actual" se acerca a "objetivo" en cada fotograma
-const luz = {
-  actual: { x: REPOSO_LUZ.x, y: REPOSO_LUZ.y, opacidad: 0, radio: 0 },
-  objetivo: { x: REPOSO_LUZ.x, y: REPOSO_LUZ.y, opacidad: 0, radio: 0 },
-};
-
-// true mientras el cursor está sobre la estrella de donar
 let estrellaEncendida = false;
+let calidez = 0;
+let estadoCaravana = "casa";
+let progresoCaravana = 0;
 
-// 0 = lado oscuro apagado, 1 = encendido entero (cursor sobre la estrella)
-let encendidoTotal = 0;
+/* ---------- 3. Motor 3D: renderizador, cámara, luces, brillo y entorno ---------- */
 
-let fotogramaPendiente = null;
+let renderizador;
+try {
+  renderizador = new THREE.WebGLRenderer({ canvas: lienzo, antialias: true, powerPreference: "high-performance" });
+} catch (error) {
+  avisoTexto.textContent = "Tu navegador no puede mostrar el cartel en 3D.";
+  throw error;
+}
+renderizador.setPixelRatio(Math.min(window.devicePixelRatio || 1, esMovil ? 1.25 : 2));
+renderizador.setSize(CARTEL.ancho, CARTEL.alto, false);
+renderizador.outputColorSpace = THREE.SRGBColorSpace;
+renderizador.toneMapping = THREE.ACESFilmicToneMapping;
+renderizador.toneMappingExposure = 1.0;
+renderizador.shadowMap.enabled = !esMovil;
+renderizador.shadowMap.type = THREE.PCFSoftShadowMap;
+renderizador.shadowMap.autoUpdate = false; // el bucle decide cuándo recalcular las sombras
 
-/* ---------- 4. Cálculos (funciones puras) ---------- */
+const escena = new THREE.Scene();
+escena.fog = new THREE.FogExp2("#0b0f1c", 0.028);
 
-// Valor intermedio entre "inicio" y "fin". factor 0 → inicio, factor 1 → fin.
-function interpolar(inicio, fin, factor) {
-  return inicio + (fin - inicio) * factor;
+const camara = new THREE.PerspectiveCamera(FOV, CARTEL.ancho / CARTEL.alto, 0.1, 80);
+camara.position.set(0, 0, D);
+camara.lookAt(0, 0, 0);
+camara.updateMatrixWorld();
+
+// Postprocesado: brillo en luces, ventanas y chispas
+const compositor = new EffectComposer(renderizador);
+compositor.setSize(CARTEL.ancho, CARTEL.alto);
+compositor.addPass(new RenderPass(escena, camara));
+const brillo = new UnrealBloomPass(new THREE.Vector2(CARTEL.ancho / 2, CARTEL.alto / 2), 0.42, 0.45, 0.92);
+compositor.addPass(brillo);
+compositor.addPass(new OutputPass());
+
+// Entorno: un cielo nocturno real (HDRI) ilumina y se refleja en metales y bolas
+const pmrem = new THREE.PMREMGenerator(renderizador);
+function cargarEntorno(intento = 0) {
+  encolar((listo) => new RGBELoader().load(`${RUTA}hdri/kloppenheim_02_puresky_1k.hdr`, (hdr) => {
+    listo();
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    escena.environment = pmrem.fromEquirectangular(hdr).texture;
+    hdr.dispose();
+  }, undefined, () => { listo(); if (intento < 4) setTimeout(() => cargarEntorno(intento + 1), 600); }));
+}
+// (se llama más abajo, cuando la cola de descargas ya existe)
+
+// Luz de luna, fría y con sombras suaves
+escena.add(new THREE.HemisphereLight("#9fb4ff", "#2a2030", 0.35));
+const luna = new THREE.DirectionalLight("#cfdcff", 1.1);
+luna.position.set(-4, 9, 10);
+luna.castShadow = true;
+luna.shadow.mapSize.set(1536, 1536);
+Object.assign(luna.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
+luna.shadow.camera.updateProjectionMatrix();
+luna.shadow.bias = -0.0006;
+luna.shadow.normalBias = 0.02;
+luna.shadow.radius = 4;
+escena.add(luna);
+
+// Luces cálidas del lado feliz (ventanas, árbol, faroles)
+[[-2.3, -0.6, 2.4, 6], [-3.6, -3.1, 2.2, 3], [-0.9, -3.1, 2.2, 3], [-2.2, -3.3, -3.2, 8]].forEach(([x, y, z, i]) => {
+  const luz = new THREE.PointLight("#ffb46b", i, 8, 1.7);
+  luz.position.set(x, y, z);
+  escena.add(luz);
+});
+
+// Lado oscuro: luz fría y tenue; y la que llega al donar
+const luzFria = new THREE.PointLight("#5f78b8", 5, 10, 1.6);
+luzFria.position.set(2.2, 0, 3);
+escena.add(luzFria);
+const luzDonacion = new THREE.PointLight("#ffb46b", 0, 11, 1.4);
+luzDonacion.position.set(2.2, -1.2, 2.4);
+escena.add(luzDonacion);
+const luzRaton = new THREE.PointLight("#ffc27a", 0, 4.2, 1.6);
+escena.add(luzRaton);
+
+/* ---------- 4. Texturas ---------- */
+
+const cargador = new THREE.TextureLoader();
+const anisotropia = Math.min(8, renderizador.capabilities.getMaxAnisotropy());
+const basesPBR = new Map();
+
+// Texturas fotográficas de Poly Haven (color, relieve y rugosidad), con reintentos:
+// un servidor local sencillo a veces corta descargas cuando llegan muchas a la vez.
+// Cola de descargas: como mucho 3 a la vez (los servidores locales sencillos cortan si llegan más)
+const cola = { activas: 0, max: 3, pendientes: [] };
+function encolar(tarea) {
+  cola.pendientes.push(tarea);
+  siguienteDescarga();
+}
+function siguienteDescarga() {
+  while (cola.activas < cola.max && cola.pendientes.length) {
+    cola.activas++;
+    const tarea = cola.pendientes.shift();
+    let terminada = false;
+    tarea(() => {
+      if (terminada) return;
+      terminada = true;
+      cola.activas--;
+      siguienteDescarga();
+    });
+  }
 }
 
-// Mezcla dos colores [r, g, b] y devuelve una cadena rgb()
-function mezclarColor(desde, hacia, factor) {
-  const [r, g, b] = desde.map((canal, i) => Math.round(interpolar(canal, hacia[i], factor)));
-  return `rgb(${r}, ${g}, ${b})`;
+const cargadorImagenes = new THREE.ImageLoader();
+function cargarImagen(url, intento = 0) {
+  return new Promise((resolver, rechazar) => {
+    encolar((listo) => {
+      let resuelto = false;
+      const fallar = () => {
+        if (resuelto) return;
+        resuelto = true;
+        clearTimeout(limite);
+        listo();
+        if (intento < 5) setTimeout(() => cargarImagen(`${url.split("?")[0]}?r=${intento + 1}`, intento + 1).then(resolver, rechazar), 400 * (intento + 1));
+        else rechazar(new Error(url));
+      };
+      // si el servidor deja la descarga colgada, se reintenta a los 8 s
+      const limite = setTimeout(fallar, 8000);
+      cargadorImagenes.load(url, (imagen) => {
+        if (resuelto) return;
+        resuelto = true;
+        clearTimeout(limite);
+        listo();
+        resolver(imagen);
+      }, undefined, fallar);
+    });
+  });
 }
 
-// Convierte las coordenadas del ratón (píxeles de la ventana) en coordenadas
-// del cartel (0–848, 0–1200), aunque el cartel esté escalado en pantalla.
-function obtenerPosicionEnCartel(evento) {
-  const marco = cartel.getBoundingClientRect();
+// Se descargan todas las texturas fotográficas ANTES de construir la escena:
+// así cada copia (con su propia repetición) nace ya con su imagen.
+const TEXTURAS_PBR = ["snow_02", "castle_brick_02_white", "clay_roof_tiles_02", "dark_wooden_planks"];
+async function precargarTexturas() {
+  const tareas = [];
+  let hechas = 0;
+  const total = TEXTURAS_PBR.length * 3;
+  const progreso = () => { avisoTexto.textContent = `Encendiendo la Navidad… ${hechas}/${total}`; };
+  progreso();
+  for (const nombre of TEXTURAS_PBR) {
+    const base = {};
+    basesPBR.set(nombre, base);
+    for (const [clave, sufijo, color] of [["map", "diff", true], ["normalMap", "nor_gl", false], ["roughnessMap", "rough", false]]) {
+      tareas.push(cargarImagen(`${RUTA}texturas/${nombre}_${sufijo}_1k.jpg`).then((imagen) => {
+        const t = new THREE.Texture(imagen);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.anisotropy = anisotropia;
+        if (color) t.colorSpace = THREE.SRGBColorSpace;
+        t.needsUpdate = true;
+        base[clave] = t;
+      }).catch(() => { base[clave] = null; }).finally(() => { hechas++; progreso(); }));
+    }
+  }
+  await Promise.all(tareas);
+}
 
-  return {
-    x: ((evento.clientX - marco.left) / marco.width) * CARTEL.ancho,
-    y: ((evento.clientY - marco.top) / marco.height) * CARTEL.alto,
+// Copia de una textura fotográfica repetida rx × ry veces (comparte la imagen: una sola subida a la GPU)
+function texturaPBR(nombre, rx, ry) {
+  const base = basesPBR.get(nombre) || {};
+  const copia = (t) => {
+    if (!t) return null;
+    const c = t.clone();
+    c.repeat.set(rx, ry);
+    return c;
   };
+  return { map: copia(base.map), normalMap: copia(base.normalMap), roughnessMap: copia(base.roughnessMap) };
 }
 
-// Influencia del cursor sobre una letra según la distancia que los separa:
-// 1 justo debajo del cursor, 0 a partir de TIPO.radio. La curva "smoothstep"
-// hace que el cambio empiece y termine suave, sin bordes bruscos.
-function calcularInfluencia(distancia) {
-  const t = Math.min(Math.max(1 - distancia / TIPO.radio, 0), 1);
-  return t * t * (3 - 2 * t);
+function lienzoTextura(ancho, alto, dibujar) {
+  const c = document.createElement("canvas");
+  c.width = ancho;
+  c.height = alto;
+  dibujar(c.getContext("2d"), ancho, alto);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = anisotropia;
+  return t;
 }
 
-// Puntos de una estrella de N puntas alternando radio exterior e interior
-function crearPuntosEstrella(puntas, radioExterior, radioInterior) {
-  const puntos = [];
+// Rama de abeto realista: eje leñoso, ramitas laterales cubiertas de agujas (más oscuras
+// dentro y más claras en las puntas) y montoncitos de nieve encima. La textura va en
+// blanco y negro de verde: el color fino lo ponen los colores de vértice de cada rama.
+const texturaRama = lienzoTextura(512, 256, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  ctx.lineCap = "round";
+  const eje = h / 2;
+  const aguja = (x, y, ang, largo, luz) => {
+    const v = luz;
+    ctx.strokeStyle = `rgb(${16 + v * 28}, ${84 + v * 92}, ${44 + v * 34})`;
+    ctx.lineWidth = azar(1.1, 1.9);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(ang) * largo, y + Math.sin(ang) * largo);
+    ctx.stroke();
+  };
+  // ramitas laterales: salen del eje hacia delante, a los dos lados
+  const ramitas = 26;
+  for (let k = 0; k < ramitas; k++) {
+    const t = k / ramitas;
+    const x0 = 14 + t * (w - 60);
+    const lado = k % 2 ? -1 : 1;
+    const largoRamita = (1 - t * 0.6) * azar(55, 85);
+    const ang = lado * azar(0.55, 0.85);
+    const x1 = x0 + Math.cos(ang) * largoRamita;
+    const y1 = eje + Math.sin(ang) * largoRamita;
+    // agujas a lo largo de la ramita
+    for (let n = 0; n < 34; n++) {
+      const u = n / 34;
+      const x = x0 + (x1 - x0) * u;
+      const y = eje + (y1 - eje) * u;
+      for (const s2 of [-1, 1]) {
+        aguja(x, y, ang + s2 * azar(0.7, 1.1), azar(9, 15) * (1 - u * 0.35), 0.25 + u * 0.75 * Math.random());
+      }
+    }
+    ctx.strokeStyle = "#3a4526";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x0, eje);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+  // agujas sobre el propio eje y punta tierna (más clara)
+  for (let n = 0; n < 160; n++) {
+    const u = n / 160;
+    const x = 10 + u * (w - 24);
+    for (const s2 of [-1, 1]) aguja(x, eje, s2 * azar(0.9, 1.4) + 0.2, azar(10, 16), u > 0.85 ? 1 : 0.35 + Math.random() * 0.4);
+  }
+  ctx.strokeStyle = "#4a3a26";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, eje);
+  ctx.lineTo(w - 22, eje);
+  ctx.stroke();
+  // nieve posada encima (en la mitad superior de la rama)
+  for (let k = 0; k < 120; k++) {
+    const x = azar(20, w - 50);
+    const y = eje - azar(10, 70) * (1 - x / w * 0.5);
+    const r = azar(6, 16) * (1 - x / w * 0.55);
+    const g = ctx.createRadialGradient(x, y - r * 0.2, 0, x, y, r);
+    g.addColorStop(0, "rgba(255,255,255,0.97)");
+    g.addColorStop(0.7, "rgba(236,242,250,0.9)");
+    g.addColorStop(1, "rgba(220,230,245,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 1.5, r * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});
+texturaRama.generateMipmaps = true;
 
-  for (let i = 0; i < puntas * 2; i++) {
-    const radio = i % 2 === 0 ? radioExterior : radioInterior;
-    const angulo = (Math.PI * i) / puntas - Math.PI / 2;
-    puntos.push(`${(Math.cos(angulo) * radio).toFixed(1)},${(Math.sin(angulo) * radio).toFixed(1)}`);
+// Tela de punto para abrigos, gorros y bufandas
+const texturaPunto = lienzoTextura(128, 128, (ctx, w, h) => {
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 8) {
+    for (let x = 0; x < w; x += 8) {
+      const o = 0.78 + Math.random() * 0.18;
+      ctx.fillStyle = `rgba(${255 * o}, ${255 * o}, ${255 * o}, 1)`;
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y + 4, 2.2, 4, -0.5, 0, Math.PI * 2);
+      ctx.ellipse(x + 6, y + 4, 2.2, 4, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+});
+texturaPunto.wrapS = texturaPunto.wrapT = THREE.RepeatWrapping;
+texturaPunto.repeat.set(3, 3);
+
+// Papel de regalo con distintos estampados
+function papelRegalo(fondo, dibujo, estilo) {
+  return lienzoTextura(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = fondo;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = dibujo;
+    ctx.strokeStyle = dibujo;
+    if (estilo === 0) {
+      for (let y = 8; y < h; y += 20) for (let x = (y / 20) % 2 ? 18 : 8; x < w; x += 20) { ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill(); }
+    } else if (estilo === 1) {
+      ctx.lineWidth = 7;
+      for (let i = -h; i < w; i += 22) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h, h); ctx.stroke(); }
+    } else {
+      for (let y = 12; y < h; y += 28) for (let x = (y / 28) % 2 ? 26 : 12; x < w; x += 28) {
+        ctx.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const r = k % 2 ? 3 : 7.5;
+          const a = -Math.PI / 2 + (k * Math.PI) / 5;
+          k ? ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+        }
+        ctx.fill();
+      }
+    }
+  });
+}
+
+// Destello suave para nieve, chispas y halos
+const texturaDestello = lienzoTextura(64, 64, (ctx, w) => {
+  const g = ctx.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.35, "rgba(255,255,255,0.65)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, w);
+});
+
+// Cielo nocturno pintado: degradado, Vía Láctea, estrellas, nubes y resplandor del pueblo
+function texturaCielo(feliz) {
+  return lienzoTextura(512, 1024, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    const paradas = feliz
+      ? [[0, "#03051a"], [0.28, "#0d0f33"], [0.48, "#2a1440"], [0.6, "#5a1d42"], [0.68, "#a8413f"], [0.73, "#f08a52"], [0.8, "#4a1a2a"], [1, "#120a14"]]
+      : [[0, "#010204"], [0.4, "#05070c"], [0.62, "#10141c"], [0.72, "#1e232d"], [1, "#0c0e13"]];
+    paradas.forEach(([o, c]) => g.addColorStop(o, c));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    // Vía Láctea
+    if (feliz) {
+      for (let i = 0; i < 2600; i++) {
+        const t = Math.random();
+        const x = t * w + azar(-60, 60) * (0.6 + fbm(t * 6, 1));
+        const y = h * 0.05 + t * h * 0.45 + azar(-45, 45);
+        ctx.fillStyle = `rgba(255, 240, 255, ${azar(0.03, 0.18)})`;
+        ctx.fillRect(x, y, 1.2, 1.2);
+      }
+    }
+    // estrellas
+    const cuantas = feliz ? 900 : 120;
+    for (let i = 0; i < cuantas; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h * 0.7;
+      const r = Math.random() < 0.06 ? azar(1.2, 2) : azar(0.4, 1.1);
+      ctx.fillStyle = `rgba(${feliz ? "255,246,225" : "140,150,170"}, ${feliz ? azar(0.5, 1) : azar(0.15, 0.4)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // nubes (suaves y teñidas en el feliz; densas y oscuras en el triste)
+    const nubes = feliz ? 70 : 260;
+    for (let i = 0; i < nubes; i++) {
+      const x = Math.random() * w;
+      const y = h * azar(feliz ? 0.45 : 0.3, 0.72);
+      const r = azar(30, feliz ? 70 : 110);
+      const c = ctx.createRadialGradient(x, y, 0, x, y, r);
+      if (feliz) {
+        c.addColorStop(0, "rgba(255, 170, 150, 0.08)");
+        c.addColorStop(1, "rgba(255, 170, 150, 0)");
+      } else {
+        c.addColorStop(0, "rgba(28, 32, 42, 0.55)");
+        c.addColorStop(1, "rgba(28, 32, 42, 0)");
+      }
+      ctx.fillStyle = c;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  });
+}
+
+// Luna con cráteres
+function texturaLuna(brillante) {
+  return lienzoTextura(256, 256, (ctx, w) => {
+    const g = ctx.createRadialGradient(w * 0.42, w * 0.4, w * 0.05, w / 2, w / 2, w / 2);
+    g.addColorStop(0, brillante ? "#fffaf0" : "#8a93a6");
+    g.addColorStop(1, brillante ? "#d9d2c0" : "#4d5566");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, w);
+    for (let i = 0; i < 60; i++) {
+      const x = Math.random() * w, y = Math.random() * w, r = azar(3, 22);
+      ctx.fillStyle = `rgba(90, 85, 80, ${azar(0.08, 0.25)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+cargarEntorno();
+await precargarTexturas();
+
+/* ---------- 5. Materiales que se calientan al donar ---------- */
+
+const materialesCalidos = [];
+
+function mat(color, opciones = {}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, envMapIntensity: 0.6, ...opciones });
+}
+
+function matPar(frio, calido, opciones = {}) {
+  const { emisivoFrio = 0, emisivoCalido = 0, opacidadFria = 1, opacidadCalida = 1, entornoFrio = 0.12, ...propias } = opciones;
+  const m = mat(frio, propias);
+  if (opacidadFria < 1 || opacidadCalida < 1) m.transparent = true;
+  // en el lado oscuro el cielo apenas se refleja; al donar recupera el reflejo normal
+  const entornoCalido = propias.envMapIntensity ?? 0.6;
+  materialesCalidos.push({ material: m, frio: new THREE.Color(frio), calido: new THREE.Color(calido), emisivoFrio, emisivoCalido, opacidadFria, opacidadCalida, entornoFrio, entornoCalido });
+  return m;
+}
+
+function aplicarCalidez() {
+  materialesCalidos.forEach((p) => {
+    p.material.color.lerpColors(p.frio, p.calido, calidez);
+    p.material.emissiveIntensity = lerp(p.emisivoFrio, p.emisivoCalido, calidez);
+    p.material.opacity = lerp(p.opacidadFria, p.opacidadCalida, calidez);
+    p.material.envMapIntensity = lerp(p.entornoFrio, p.entornoCalido, calidez);
+  });
+}
+
+// Cada lado construye sus piezas con su paleta: el triste guarda la versión cálida
+const LADO_FELIZ = {
+  feliz: true,
+  m: (calido, frio, op) => mat(calido, op),
+  luz: (color, i) => mat("#2a2018", { emissive: color, emissiveIntensity: i }),
+};
+const LADO_TRISTE = {
+  feliz: false,
+  m: (calido, frio, op) => matPar(frio, calido, op),
+  luz: (color, i) => matPar("#0b0d12", "#2a2018", { emissive: color, emisivoFrio: 0, emisivoCalido: i }),
+};
+
+function sombras(objeto, proyecta = true) {
+  objeto.traverse((h) => {
+    if (h.isMesh) {
+      h.castShadow = proyecta;
+      h.receiveShadow = true;
+    }
+  });
+  return objeto;
+}
+
+/* ---------- 6. Piezas ---------- */
+
+const geoCaja = new THREE.BoxGeometry(1, 1, 1);
+const geoEsfera = new THREE.SphereGeometry(1, 24, 16);
+const geoEsferaBaja = new THREE.SphereGeometry(1, 10, 8);
+
+function malla(geometria, material, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) {
+  const m = new THREE.Mesh(geometria, material);
+  m.position.set(x, y, z);
+  m.scale.set(sx, sy, sz);
+  return m;
+}
+
+// Material "plastilina": mate, suave, con un leve brillo de piel (estilo de las referencias)
+function arcilla(color, opciones = {}) {
+  return new THREE.MeshPhysicalMaterial({ color, roughness: 0.55, sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color("#ffffff"), clearcoat: 0.08, envMapIntensity: 0.55, ...opciones });
+}
+
+// Regalo: caja de cantos redondeados, cinta en cruz y lazo de dos bucles con colas.
+// Cada uno con una combinación distinta de caja y cinta. Centrado en su origen (para la física).
+const COMBINACIONES = [
+  ["#f4f4f6", "#d0202f"], ["#d0202f", "#f2c14e"], ["#1f8a4c", "#f4f4f6"], ["#2f6fd6", "#f2c14e"],
+  ["#f2c14e", "#d0202f"], ["#f59ac0", "#f4f4f6"], ["#8a4fd6", "#f2c14e"], ["#1aa39a", "#d0202f"],
+  ["#f6e6c8", "#1f8a4c"], ["#ff8a3d", "#f4f4f6"], ["#203a8f", "#e6e6ea"], ["#f4f4f6", "#1f8a4c"],
+];
+const geoCajaRegalo = new RoundedBoxGeometry(1, 1, 1, 4, 0.12);
+const geoCintaV = new RoundedBoxGeometry(0.22, 1.03, 1.03, 2, 0.04);
+const geoCintaH = new RoundedBoxGeometry(1.03, 1.03, 0.22, 2, 0.04);
+const geoBucle = new THREE.TorusGeometry(0.2, 0.075, 12, 28);
+const geoNudo = new RoundedBoxGeometry(0.24, 0.16, 0.24, 2, 0.06);
+const geoCola = new RoundedBoxGeometry(0.11, 0.3, 0.03, 2, 0.012);
+let siguienteCombinacion = 0;
+
+function crearRegalo(indice) {
+  const [colorCaja, colorCinta] = COMBINACIONES[(indice ?? siguienteCombinacion++) % COMBINACIONES.length];
+  const g = new THREE.Group();
+  const caja = arcilla(colorCaja);
+  const cinta = arcilla(colorCinta, { roughness: 0.45, sheen: 0.6 });
+  g.add(new THREE.Mesh(geoCajaRegalo, caja));
+  g.add(new THREE.Mesh(geoCintaV, cinta), new THREE.Mesh(geoCintaH, cinta));
+  // lazo: dos bucles inclinados, el nudo y dos colas
+  for (const s2 of [-1, 1]) {
+    const bucle = malla(geoBucle, cinta, s2 * 0.2, 0.66, 0, 1, 1, 0.55);
+    bucle.rotation.set(0, 0, s2 * -0.45);
+    g.add(bucle);
+    const cola = malla(geoCola, cinta, s2 * 0.14, 0.5, 0.12);
+    cola.rotation.set(-0.3, 0, s2 * 0.5);
+    g.add(cola);
+  }
+  g.add(malla(geoNudo, cinta, 0, 0.56, 0));
+  g.userData.materiales = [caja, cinta];
+  return sombras(g);
+}
+
+// Casa realista: paredes de ladrillo o madera, tejado de tejas con nieve, ventanas con luz,
+// carámbanos, chimenea con humo, puerta con corona y luces en el alero
+const humos = [];
+const geoCaramelo = new THREE.ConeGeometry(0.012, 1, 5);
+const hielo = new THREE.MeshStandardMaterial({ color: "#dff1ff", roughness: 0.05, transparent: true, opacity: 0.75, envMapIntensity: 1.4 });
+
+function crearCasa(lado, { ancho, alto, fondo, pared, tono, tonoFrio, techo = "#ffffff", plantas = alto > 1.3 ? 2 : 1 }) {
+  const g = new THREE.Group();
+  const feliz = lado.feliz;
+  const zf = fondo / 2;                       // fachada delantera
+  const zocalo = Math.min(0.22, alto * 0.12); // base de piedra
+  const texPared = texturaPBR(pared, Math.max(1, ancho * 1.1), Math.max(1, alto * 1.1));
+  const mPared = lado.m(tono, tonoFrio, { ...texPared, roughness: 1, normalScale: new THREE.Vector2(1.3, 1.3) });
+  const mZocalo = lado.m("#8d8478", "#33363d", { ...texturaPBR("castle_brick_02_white", ancho * 1.4, 0.5), roughness: 1, normalScale: new THREE.Vector2(1.6, 1.6) });
+  const texTeja = texturaPBR("clay_roof_tiles_02", ancho * 1.2, fondo * 1.0);
+  const mTeja = lado.m(techo, "#55595f", { ...texTeja, roughness: 1, normalScale: new THREE.Vector2(1.4, 1.4) });
+  const mNieve = lado.m("#ffffff", "#8d95a5", { ...texturaPBR("snow_02", ancho * 0.7, fondo * 0.6), roughness: 0.9 });
+  const mMadera = lado.m("#f1ece4", "#2c2f36", { roughness: 0.65 });
+  const mMaderaOscura = lado.m("#5a3a26", "#24262b", { ...texturaPBR("dark_wooden_planks", 0.6, 0.6), roughness: 0.8 });
+
+  // base de piedra y paredes
+  g.add(malla(geoCaja, mZocalo, 0, zocalo / 2, 0, ancho + 0.04, zocalo, fondo + 0.04));
+  g.add(malla(geoCaja, mPared, 0, zocalo + (alto - zocalo) / 2, 0, ancho, alto - zocalo, fondo));
+  // esquineras de madera y moldura entre plantas
+  for (const s of [-1, 1]) g.add(malla(geoCaja, mMadera, s * (ancho / 2 - 0.02), alto / 2 + zocalo / 2, zf + 0.005, 0.05, alto - zocalo, 0.03));
+  if (plantas === 2) g.add(malla(geoCaja, mMadera, 0, alto * 0.52, zf + 0.008, ancho, 0.045, 0.035));
+  g.add(malla(geoCaja, mMadera, 0, alto - 0.025, zf + 0.008, ancho + 0.02, 0.05, 0.035));
+
+  // hastial (triángulo de pared bajo el tejado) con su ventanita de buhardilla
+  const pendiente = 0.68;
+  const altoTejado = (ancho / 2) * pendiente;
+  const tri = new THREE.Shape();
+  tri.moveTo(-ancho / 2, 0); tri.lineTo(0, altoTejado); tri.lineTo(ancho / 2, 0); tri.lineTo(-ancho / 2, 0);
+  const geoTri = new THREE.ExtrudeGeometry(tri, { depth: fondo * 0.98, bevelEnabled: false });
+  geoTri.translate(0, alto, -fondo * 0.49);
+  g.add(new THREE.Mesh(geoTri, mPared));
+  const cristal = lado.luz("#ffb35c", 3.2);
+  const rBuhardilla = Math.min(0.11, ancho * 0.07);
+  g.add(malla(new THREE.CylinderGeometry(rBuhardilla + 0.03, rBuhardilla + 0.03, 0.03, 20), mMadera, 0, alto + altoTejado * 0.42, zf - 0.005).rotateX(Math.PI / 2));
+  g.add(malla(new THREE.CylinderGeometry(rBuhardilla, rBuhardilla, 0.03, 20), cristal, 0, alto + altoTejado * 0.42, zf + 0.005).rotateX(Math.PI / 2));
+
+  // tejado a dos aguas con alero, tablas de remate y una capa gruesa de nieve
+  const vuelo = 0.16;
+  const largo = Math.hypot(ancho / 2 + vuelo, altoTejado + vuelo * pendiente) + 0.02;
+  const angulo = Math.atan2(altoTejado, ancho / 2);
+  for (const s of [-1, 1]) {
+    const cx = s * (ancho / 4 + vuelo / 2 - 0.02);
+    const cy = alto + altoTejado / 2 - vuelo * pendiente / 2 + 0.05;
+    const agua = malla(geoCaja, mTeja, cx, cy, 0, largo, 0.08, fondo + 0.34);
+    agua.rotation.z = -s * angulo;
+    g.add(agua);
+    const remate = malla(geoCaja, mMaderaOscura, cx, cy - 0.01, zf + 0.17, largo, 0.11, 0.035);
+    remate.rotation.z = -s * angulo;
+    g.add(remate);
+    const nieve = malla(geoCaja, mNieve, cx - s * 0.015, cy + 0.075, 0, largo * 0.98, 0.08, fondo + 0.36);
+    nieve.rotation.z = -s * angulo;
+    g.add(nieve);
+    // borde redondeado de la nieve que cuelga del alero
+    const borde = malla(new THREE.CylinderGeometry(0.045, 0.045, fondo + 0.36, 10), mNieve, s * (ancho / 2 + vuelo - 0.03), alto - vuelo * pendiente + 0.1, 0);
+    borde.rotation.x = Math.PI / 2;
+    g.add(borde);
   }
 
-  return puntos.join(" ");
+  // chimenea de ladrillo con remate y humo
+  const mChimenea = lado.m("#a8533c", "#3a3d45", { ...texturaPBR("castle_brick_02_white", 0.5, 1.1), roughness: 1 });
+  const chx = ancho * 0.26;
+  const chAlto = altoTejado * 1.05;
+  g.add(malla(geoCaja, mChimenea, chx, alto + altoTejado * 0.55 + chAlto / 2 - 0.1, -fondo * 0.12, ancho * 0.13, chAlto, ancho * 0.13));
+  const chTop = alto + altoTejado * 0.55 + chAlto - 0.1;
+  g.add(malla(geoCaja, mZocalo, chx, chTop + 0.02, -fondo * 0.12, ancho * 0.17, 0.05, ancho * 0.17));
+  g.add(malla(geoCaja, mNieve, chx, chTop + 0.06, -fondo * 0.12, ancho * 0.16, 0.035, ancho * 0.16));
+  const humo = new THREE.Group();
+  humo.position.set(chx, chTop + 0.1, -fondo * 0.12);
+  humo.scale.setScalar(Math.max(1, ancho * 0.9));
+  for (let i = 0; i < 6; i++) {
+    const nube = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaDestello, color: "#c9c4c0", transparent: true, opacity: 0, depthWrite: false }));
+    nube.userData.fase = i / 6;
+    humo.add(nube);
+  }
+  humo.userData.feliz = feliz;
+  humos.push(humo);
+  g.add(humo);
+
+  // ventanas: marco, cuatro cristales con luz, cortinas, contraventanas y alféizar nevado
+  const tabla = feliz ? null : matPar("#4a3a2b", "#4a3a2b", { opacidadFria: 1, opacidadCalida: 0 });
+  const cortina = lado.m("#8f1d2c", "#1a1c22", { roughness: 0.9 });
+  const contraventana = lado.m(elegir(["#2f5a3a", "#6e2a24", "#2d4a6b"]), "#25282e", { roughness: 0.7 });
+  const columnas = ancho > 1.25 ? 3 : 2;
+  const vw = Math.min(0.3, ancho * 0.15);
+  const vh = vw * 1.45;
+  const pw = Math.min(0.34, ancho * 0.2);
+  const ph = Math.min(0.68, (plantas === 2 ? alto * 0.5 : alto * 0.62) - zocalo);
+  const pisos = plantas === 2 ? [zocalo + (alto * 0.52 - zocalo) * 0.55, alto * 0.52 + (alto * 0.48) * 0.48] : [zocalo + (alto - zocalo) * 0.55];
+  pisos.forEach((vy, f) => {
+    for (let c = 0; c < columnas; c++) {
+      const vx = (c - (columnas - 1) / 2) * (ancho / columnas);
+      if (f === 0 && (columnas === 3 ? c === 1 : false)) continue; // ahí va la puerta
+      const x = columnas === 2 && f === 0 ? vx * 1.25 : vx;          // deja sitio a la puerta
+      g.add(malla(geoCaja, mMadera, x, vy, zf + 0.012, vw + 0.06, vh + 0.06, 0.035));
+      g.add(malla(geoCaja, cristal, x, vy, zf + 0.026, vw, vh, 0.01));
+      g.add(malla(geoCaja, mMadera, x, vy, zf + 0.034, 0.02, vh, 0.012));
+      g.add(malla(geoCaja, mMadera, x, vy, zf + 0.034, vw, 0.02, 0.012));
+      for (const s of [-1, 1]) {
+        g.add(malla(geoCaja, cortina, x + s * vw * 0.36, vy + vh * 0.05, zf + 0.03, vw * 0.24, vh * 0.85, 0.008));
+        const cv = malla(geoCaja, contraventana, x + s * (vw / 2 + vw * 0.27 + 0.03), vy, zf + 0.025, vw * 0.5, vh + 0.04, 0.025);
+        if (!feliz && s > 0 && (c + f) % 2 === 0) { cv.rotation.z = 0.2; cv.position.y -= 0.03; }
+        g.add(cv);
+      }
+      g.add(malla(geoCaja, mMadera, x, vy - vh / 2 - 0.04, zf + 0.04, vw + 0.14, 0.03, 0.08));
+      g.add(malla(geoCaja, mNieve, x, vy - vh / 2 - 0.015, zf + 0.045, vw + 0.12, 0.03, 0.07));
+      if (tabla && (f + c) % 2 === 0) {
+        const t1 = malla(geoCaja, tabla, x, vy, zf + 0.055, vw * 1.4, 0.05, 0.02);
+        t1.rotation.z = 0.55;
+        const t2 = t1.clone();
+        t2.rotation.z = -0.55;
+        g.add(t1, t2);
+      }
+    }
+  });
+
+  // puerta de madera con marco, pomo, corona, escalones, tejadillo y aplique de luz
+  const mPuerta = lado.m("#8a5a36", "#2a2b30", { ...texturaPBR("dark_wooden_planks", 0.5, 1), roughness: 0.85 });
+  const piso = zocalo;
+  g.add(malla(geoCaja, mZocalo, 0, 0.04, zf + 0.12, pw + 0.3, 0.08, 0.24));
+  g.add(malla(geoCaja, mZocalo, 0, 0.1, zf + 0.06, pw + 0.18, 0.08, 0.14));
+  g.add(malla(geoCaja, mNieve, 0, 0.085, zf + 0.2, pw + 0.32, 0.02, 0.1));
+  g.add(malla(geoCaja, mMadera, 0, piso + ph / 2 + 0.02, zf + 0.012, pw + 0.08, ph + 0.05, 0.035));
+  g.add(malla(geoCaja, mPuerta, 0, piso + ph / 2, zf + 0.028, pw, ph, 0.02));
+  for (const yy of [0.3, 0.72]) g.add(malla(geoCaja, mMaderaOscura, 0, piso + ph * yy, zf + 0.04, pw * 0.8, ph * 0.3, 0.008));
+  g.add(malla(geoEsferaBaja, lado.m("#d4af37", "#3a3c42", { metalness: 0.9, roughness: 0.3 }), pw * 0.34, piso + ph * 0.48, zf + 0.05, 0.018));
+  g.add(malla(new THREE.TorusGeometry(pw * 0.22, pw * 0.08, 8, 20), lado.m("#1d5c32", "#262a24", { roughness: 0.9 }), 0, piso + ph * 0.75, zf + 0.055));
+  g.add(malla(geoEsferaBaja, lado.m(C.rojo, "#2a2b30"), 0, piso + ph * 0.75 - pw * 0.22, zf + 0.065, 0.025));
+  const tejadillo = malla(geoCaja, mTeja, 0, piso + ph + 0.12, zf + 0.12, pw + 0.36, 0.05, 0.3);
+  tejadillo.rotation.x = 0.35;
+  g.add(tejadillo);
+  g.add(malla(geoCaja, mNieve, 0, piso + ph + 0.165, zf + 0.11, pw + 0.36, 0.035, 0.3).rotateX(0.35));
+  for (const s of [-1, 1]) {
+    const mensula = malla(geoCaja, mMaderaOscura, s * (pw / 2 + 0.12), piso + ph + 0.02, zf + 0.08, 0.03, 0.16, 0.03);
+    mensula.rotation.x = -0.6;
+    g.add(mensula);
+  }
+  g.add(malla(geoCaja, lado.m("#222", "#1a1b1f", { metalness: 0.6, roughness: 0.4 }), pw / 2 + 0.16, piso + ph * 0.75, zf + 0.04, 0.05, 0.08, 0.05));
+  g.add(malla(geoEsferaBaja, lado.luz("#ffd27a", 5), pw / 2 + 0.16, piso + ph * 0.75, zf + 0.07, 0.03));
+
+  // carámbanos colgando del alero
+  const nCar = Math.round(ancho * 8);
+  for (let k = 0; k < nCar; k++) {
+    const l = azar(0.05, 0.2);
+    const cono = malla(geoCaramelo, hielo, -ancho / 2 + (k + 0.5) * (ancho / nCar), alto - vuelo * pendiente + 0.04 - l / 2, zf + 0.16, 1.4, l, 1.4);
+    cono.rotation.x = Math.PI;
+    cono.castShadow = false;
+    g.add(cono);
+  }
+  // guirnalda de luces de colores bajo el alero
+  const bombillas = ["#ffd166", "#ff4d4d", "#5aa9ff", "#7dff9a"].map((c) => lado.luz(c, 4));
+  const nLuces = Math.round(ancho * 9);
+  for (let k = 0; k < nLuces; k++) {
+    const x = -ancho / 2 + (k + 0.5) * (ancho / nLuces);
+    g.add(malla(geoEsferaBaja, bombillas[k % 4], x, alto - 0.06 - Math.sin(((k % 6) / 6) * Math.PI) * 0.05, zf + 0.06, 0.022));
+  }
+  return sombras(g);
 }
 
-// Escala máxima con la que el cartel cabe entero en la ventana (nunca más de 1).
-function calcularEscala(anchoVentana, altoVentana) {
-  const escala = Math.min(
-    (anchoVentana - CARTEL.margenVentana) / CARTEL.ancho,
-    (altoVentana - CARTEL.margenVentana) / CARTEL.alto,
-    1
+// Abeto realista: verticilos de ramas curvas (caen con el peso y levantan la punta),
+// cada rama con tres planos de agujas para darle volumen, un núcleo oscuro que tapa
+// los huecos y colores de vértice: más oscuro y frío por dentro, más claro en las puntas.
+const materialRamas = new THREE.MeshStandardMaterial({ map: texturaRama, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.35 });
+const profundidadRamas = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: texturaRama, alphaTest: 0.42 });
+const materialNucleo = new THREE.MeshStandardMaterial({ color: "#0b2614", roughness: 1, envMapIntensity: 0.2 });
+
+function ramaCurva(largo, ancho, caida, punta, matriz, tono) {
+  const geo = new THREE.PlaneGeometry(largo, ancho, 7, 1);
+  geo.translate(largo / 2, 0, 0);
+  const pos = geo.attributes.position;
+  const colores = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getX(i) / largo;
+    // cae hacia la punta y la última parte se levanta un poco
+    pos.setY(i, pos.getY(i) - caida * largo * u * u + punta * largo * Math.max(0, u - 0.75) * 2);
+    const luz = tono * (0.72 + u * 0.4);
+    colores.set([luz * 0.92, luz, luz * 0.9], i * 3);
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(colores, 3));
+  geo.computeVertexNormals();
+  geo.applyMatrix4(matriz);
+  return geo;
+}
+
+function geometriaAbeto(alto, radio, densidad = 1) {
+  const piezas = [];
+  const verticilos = Math.round(alto * 14 * densidad);
+  const eje = new THREE.Vector3(1, 0, 0);
+  for (let v = 0; v < verticilos; v++) {
+    const t = v / verticilos;
+    const y = alto * (0.1 + t * 0.87) + azar(-0.03, 0.03);
+    const r = radio * Math.pow(1 - t, 1.05) + 0.07;
+    const ramas = Math.max(5, Math.round(8 + r * 7));
+    const giro = v * 2.4; // ángulo áureo: las ramas no se alinean entre pisos
+    const tono = lerp(0.82, 1.12, t) * azar(0.9, 1.08); // abajo más oscuro, arriba más claro
+    for (let b = 0; b < ramas; b++) {
+      const a = giro + (b / ramas) * Math.PI * 2 + azar(-0.15, 0.15);
+      const largo = r * azar(0.9, 1.12);
+      const subida = azar(0.08, 0.22) - t * 0.12;         // ángulo de salida
+      const caida = azar(0.18, 0.32) * (1 - t * 0.5);      // peso de la nieve
+      const qDir = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -a, subida, "YXZ"));
+      for (const giroPlano of [-0.6, 0, 0.6]) {
+        const qPlano = new THREE.Quaternion().setFromAxisAngle(eje, -Math.PI / 2 + giroPlano);
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(0, y, 0), qDir.clone().multiply(qPlano), new THREE.Vector3(1, 1, 1));
+        piezas.push(ramaCurva(largo, largo * 0.5, caida, 0.12, m, tono * (giroPlano === 0 ? 1 : 0.85)));
+      }
+    }
+  }
+  // copa: brote terminal vertical
+  for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(0, alto * 0.97, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, a, Math.PI / 2)), new THREE.Vector3(1, 1, 1));
+    piezas.push(ramaCurva(alto * 0.12, alto * 0.07, 0, 0, m, 1.1));
+  }
+  return mergeGeometries(piezas);
+}
+
+const texTronco = texturaPBR("dark_wooden_planks", 0.4, 2);
+const materialTronco = mat("#6b4a35", { ...texTronco, roughness: 1 });
+
+const cacheAbetos = new Map();
+function crearAbeto(alto, radio, densidad = 1, proyectaSombra = true) {
+  const g = new THREE.Group();
+  g.add(malla(new THREE.CylinderGeometry(0.035 * alto, 0.07 * alto, alto * 0.35, 8), materialTronco, 0, alto * 0.17, 0));
+  const clave = `${alto}|${radio}|${densidad}`;
+  if (!cacheAbetos.has(clave)) cacheAbetos.set(clave, geometriaAbeto(alto, radio, densidad));
+  const ramas = new THREE.Mesh(cacheAbetos.get(clave), materialRamas);
+  ramas.customDepthMaterial = profundidadRamas;
+  g.add(ramas);
+  // núcleo: un cono oscuro dentro de la copa, para que no se vea el cielo a través
+  const nucleo = malla(new THREE.ConeGeometry(radio * 0.55, alto * 0.86, 12), materialNucleo, 0, alto * 0.53, 0);
+  nucleo.castShadow = false;
+  g.add(nucleo);
+  return sombras(g, proyectaSombra);
+}
+
+// El gran árbol de Navidad: abeto + bolas que reflejan, luces con brillo y estrella
+const lucesArbol = ["#ffd27a", "#ff5a4d", "#7ab8ff", "#fff3d6"].map((c) => mat("#221a10", { emissive: c, emissiveIntensity: 3 }));
+
+function crearArbolNavidad() {
+  const g = crearAbeto(4.4, 1.85, 1.15);
+  const radioEn = (y) => 1.85 * Math.pow(1 - limitar((y - 0.5) / 3.9, 0, 1), 0.95) * 0.86 + 0.05;
+  const coloresBolas = ["#b3121f", "#c9a227", "#1d4e89", "#e8e8e8", "#7a1f5c", "#1f6b3a"];
+  for (let i = 0; i < 44; i++) {
+    const y = azar(0.7, 3.9);
+    const r = radioEn(y);
+    const a = azar(-1.4, 1.4);
+    const m = new THREE.MeshStandardMaterial({ color: elegir(coloresBolas), metalness: 1, roughness: azar(0.08, 0.35), envMapIntensity: 1.6 });
+    g.add(malla(geoEsfera, m, Math.sin(a) * r, y, Math.cos(a) * r, azar(0.07, 0.1)));
+  }
+  for (let i = 0; i < 140; i++) {
+    const t = i / 140;
+    const y = 0.6 + t * 3.5;
+    const a = t * Math.PI * 12;
+    if (Math.cos(a) < -0.35) continue;
+    const r = radioEn(y) * 1.02;
+    g.add(malla(geoEsferaBaja, lucesArbol[i % 4], Math.sin(a) * r, y, Math.cos(a) * r, 0.032));
+  }
+  // cadena de cuentas doradas
+  const oro = new THREE.MeshStandardMaterial({ color: "#d4a93a", metalness: 1, roughness: 0.25, envMapIntensity: 1.5 });
+  for (let i = 0; i < 260; i++) {
+    const t = i / 260;
+    const y = 0.75 + t * 3.2;
+    const a = t * Math.PI * 8 + 1;
+    if (Math.cos(a) < -0.3) continue;
+    const r = radioEn(y) * 1.03;
+    g.add(malla(geoEsferaBaja, oro, Math.sin(a) * r, y - Math.abs(Math.sin(a * 2)) * 0.05, Math.cos(a) * r, 0.018));
+  }
+  // estrella dorada
+  const forma = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 0.13 : 0.3;
+    const a = Math.PI / 2 + (i * Math.PI) / 5;
+    i ? forma.lineTo(Math.cos(a) * r, Math.sin(a) * r) : forma.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const estrella = malla(new THREE.ExtrudeGeometry(forma, { depth: 0.06, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.025, bevelSegments: 3 }),
+    new THREE.MeshStandardMaterial({ color: "#ffd166", metalness: 1, roughness: 0.2, emissive: "#ffb000", emissiveIntensity: 2.2, envMapIntensity: 1.5 }), 0, 4.75, -0.03);
+  g.add(estrella);
+  g.userData.estrella = estrella;
+  const luz = new THREE.PointLight("#ffc96b", 3, 4, 1.8);
+  luz.position.set(0, 2.2, 1.6);
+  g.add(luz);
+  // falda de terciopelo rojo con ribete dorado bajo el árbol
+  const falda = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.25, 0.04, 40, 1, false), new THREE.MeshPhysicalMaterial({ color: "#7a0d18", roughness: 0.8, sheen: 1, sheenColor: new THREE.Color("#ff6a6a"), envMapIntensity: 0.4 }));
+  falda.position.y = 0.02;
+  falda.receiveShadow = true;
+  g.add(falda);
+  g.add(malla(new THREE.TorusGeometry(1.22, 0.025, 6, 48), new THREE.MeshStandardMaterial({ color: "#d4a93a", metalness: 1, roughness: 0.3 }), 0, 0.04, 0).rotateX(Math.PI / 2));
+  // regalos bajo el árbol (viajan con él)
+  [[-0.8, 0.5, 0.42], [-0.25, 0.75, 0.55], [0.4, 0.62, 0.45], [0.95, 0.45, 0.34], [-0.3, 0.75, 0.3, 0.55]].forEach(([x, z, t, y = 0], i) => {
+    const r = crearRegalo(i);
+    r.scale.setScalar(t);
+    r.position.set(x, y + t / 2, z);
+    r.rotation.y = azar(-0.5, 0.5);
+    g.add(r);
+  });
+  return g;
+}
+
+// Árbol seco: tronco y ramas retorcidas, sin hojas
+function crearArbolSeco() {
+  const g = new THREE.Group();
+  const madera = matPar("#8a7f74", "#8a7f74", { ...texturaPBR("dark_wooden_planks", 0.3, 2), opacidadFria: 1, opacidadCalida: 0, roughness: 1, entornoFrio: 0.5 });
+  function rama(longitud, grosor, nivel, padre, angZ, angY) {
+    const pivote = new THREE.Group();
+    pivote.rotation.set(0, angY, angZ);
+    const geo = new THREE.CylinderGeometry(grosor * 0.6, grosor, longitud, 7);
+    geo.translate(0, longitud / 2, 0);
+    pivote.add(new THREE.Mesh(geo, madera));
+    padre.add(pivote);
+    if (nivel > 0) {
+      const hijos = nivel === 3 ? 6 : 3;
+      for (let i = 0; i < hijos; i++) {
+        const sub = new THREE.Group();
+        sub.position.y = longitud * azar(0.45, 0.95);
+        pivote.add(sub);
+        rama(longitud * azar(0.45, 0.65), grosor * 0.55, nivel - 1, sub, azar(0.5, 1.1) * (i % 2 ? 1 : -1), azar(0, Math.PI * 2));
+      }
+    }
+  }
+  rama(3.4, 0.14, 3, g, 0, 0);
+  // guirnalda apagada
+  const apagada = matPar("#2c2f36", "#2c2f36", { opacidadFria: 1, opacidadCalida: 0, roughness: 0.4, metalness: 0.4 });
+  for (let i = 0; i < 9; i++) g.add(malla(geoEsferaBaja, apagada, -0.8 + i * 0.2, 1.4 - Math.sin((i / 8) * Math.PI) * 0.35, 0.18, 0.045));
+  return sombras(g);
+}
+
+// Modelos reales de Poly Haven (farolas, farol, caja de cartón)
+const gltf = new GLTFLoader();
+const PROPIEDADES_TEXTURA = ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"];
+function cargarModelo(nombre, alListo, intento = 0) {
+  encolar((listo) => gltf.load(`${RUTA}modelos/${nombre}/${nombre}_1k.gltf`, (r) => {
+    listo();
+    // si alguna textura del modelo no llegó, se quita (en vez de avisar en cada fotograma)
+    r.scene.traverse((m) => {
+      if (!m.isMesh) return;
+      PROPIEDADES_TEXTURA.forEach((clave) => {
+        const t = m.material[clave];
+        if (t && !t.image) { m.material[clave] = null; m.material.needsUpdate = true; }
+      });
+    });
+    alListo(sombras(r.scene));
+  }, undefined, () => { listo(); if (intento < 3) setTimeout(() => cargarModelo(nombre, alListo, intento + 1), 800); }));
+}
+
+/* ---------- 7. Niños ---------- */
+
+const geoPierna = new THREE.CapsuleGeometry(0.07, 0.32, 4, 10);
+const geoBrazo = new THREE.CapsuleGeometry(0.06, 0.3, 4, 10);
+const geoAbrigo = new THREE.CylinderGeometry(0.19, 0.3, 0.62, 22);
+const geoGorro = new THREE.SphereGeometry(0.265, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+const geoBoca = new THREE.TorusGeometry(0.07, 0.016, 8, 18, Math.PI);
+
+function telaMat(color) {
+  return new THREE.MeshStandardMaterial({ color, map: texturaPunto, roughness: 1, envMapIntensity: 0.4 });
+}
+
+function crearNino({ feliz, triste, regalo = 0, mejillas = "#e07b8f", lagrima = false, inclinacion = 0.15 }, siempreFeliz) {
+  const mats = {};
+  const tonos = {};
+  for (const clave of ["abrigo", "piel", "gorro", "banda", "bufanda"]) {
+    const inicial = siempreFeliz ? feliz[clave] : triste[clave];
+    mats[clave] = clave === "piel"
+      ? new THREE.MeshPhysicalMaterial({ color: inicial, roughness: 0.55, sheen: 0.4, sheenColor: new THREE.Color("#ffd9c4"), envMapIntensity: 0.4 })
+      : telaMat(inicial);
+    tonos[clave] = [new THREE.Color(triste ? triste[clave] : feliz[clave]), new THREE.Color(feliz[clave])];
+  }
+  const ojos = new THREE.MeshPhysicalMaterial({ color: "#14110f", roughness: 0.1, clearcoat: 1 });
+  const pantalon = telaMat("#2a2d36");
+  const botas = mat("#3a2418", { roughness: 0.5 });
+
+  const raiz = new THREE.Group();
+  const cuerpo = new THREE.Group();
+  raiz.add(cuerpo);
+  const piernas = [-1, 1].map((s) => {
+    const b = new THREE.Group();
+    b.position.set(s * 0.1, 0.45, 0);
+    b.add(malla(geoPierna, pantalon, 0, -0.22, 0));
+    b.add(malla(geoEsfera, botas, 0, -0.44, 0.04, 0.095, 0.075, 0.13));
+    cuerpo.add(b);
+    return b;
+  });
+  cuerpo.add(malla(geoAbrigo, mats.abrigo, 0, 0.76, 0));
+  for (let i = 0; i < 3; i++) cuerpo.add(malla(geoEsferaBaja, mat("#e9e2d3", { roughness: 0.4 }), 0, 0.92 - i * 0.14, 0.215 + i * 0.022, 0.022));
+  cuerpo.add(malla(new THREE.TorusGeometry(0.17, 0.06, 10, 20), mats.bufanda, 0, 1.06, 0).rotateX(Math.PI / 2));
+  cuerpo.add(malla(geoCaja, mats.bufanda, 0.08, 0.92, 0.2, 0.09, 0.22, 0.04).rotateZ(0.15));
+  const brazos = [-1, 1].map((s) => {
+    const b = new THREE.Group();
+    b.position.set(s * 0.25, 1.0, 0);
+    b.add(malla(geoBrazo, mats.abrigo, 0, -0.2, 0));
+    b.add(malla(geoEsfera, mats.bufanda, 0, -0.42, 0, 0.075));
+    cuerpo.add(b);
+    return b;
+  });
+  const regaloMano = crearRegalo(regalo);
+  regaloMano.scale.setScalar(0.32);
+  regaloMano.position.set(0, 0.86, 0.34);
+  cuerpo.add(regaloMano);
+
+  const cuello = new THREE.Group();
+  cuello.position.set(0, 1.08, 0);
+  cuerpo.add(cuello);
+  cuello.add(malla(geoEsfera, mats.piel, 0, 0.26, 0, 0.25));
+  for (const s of [-1, 1]) cuello.add(malla(geoEsfera, mats.piel, s * 0.245, 0.25, 0, 0.05, 0.07, 0.04));
+  cuello.add(malla(geoEsferaBaja, mats.piel, 0, 0.23, 0.245, 0.035, 0.03, 0.03));
+  cuello.add(malla(geoGorro, mats.gorro, 0, 0.34, -0.01, 1, 1.18, 1).rotateX(-0.1));
+  cuello.add(malla(new THREE.TorusGeometry(0.25, 0.06, 10, 24), mats.banda, 0, 0.37, 0).rotateX(Math.PI / 2 - 0.1));
+  cuello.add(malla(geoEsfera, mats.banda, 0, 0.69, -0.06, 0.085));
+  for (const s of [-1, 1]) {
+    cuello.add(malla(geoEsfera, mat("#ffffff", { roughness: 0.2 }), s * 0.085, 0.3, 0.215, 0.04, 0.045, 0.02));
+    cuello.add(malla(geoEsfera, ojos, s * 0.085, 0.3, 0.232, 0.026));
+    cuello.add(malla(geoEsferaBaja, mat("#ffffff", { emissive: "#ffffff", emissiveIntensity: 0.4 }), s * 0.085 + 0.009, 0.31, 0.255, 0.008));
+  }
+  cuello.add(malla(geoEsfera, mat("#e8907a", { roughness: 0.5 }), 0, 0.235, 0.25, 0.032, 0.026, 0.026));
+  const boca = malla(geoBoca, mat("#5a1f22"), 0, 0.15, 0.235);
+  cuello.add(boca);
+  const mejilla = mat(mejillas, { transparent: true, opacity: 0 });
+  for (const s of [-1, 1]) cuello.add(malla(geoEsferaBaja, mejilla, s * 0.15, 0.19, 0.2, 0.045, 0.032, 0.015));
+  const ceja = mat("#3a2a20", { transparent: true, opacity: 0 });
+  for (const s of [-1, 1]) {
+    const c = malla(geoCaja, ceja, s * 0.09, 0.385, 0.228, 0.08, 0.016, 0.01);
+    c.rotation.z = s * -0.35;
+    cuello.add(c);
+  }
+  const lagrimas = [-1, 1, -1, 1].map((s, i) => {
+    const l = malla(geoEsferaBaja, new THREE.MeshPhysicalMaterial({ color: "#bfe3ff", roughness: 0, clearcoat: 1, transparent: true, opacity: 0, emissive: "#5a8fc8", emissiveIntensity: 0.6 }), s * 0.085, 0.26, 0.235, 0.022, 0.032, 0.018);
+    l.userData.fase = i * 0.28;
+    cuello.add(l);
+    return l;
+  });
+  sombras(raiz);
+
+  const n = { raiz, cuerpo, piernas, brazos, cuello, boca, mejilla, ceja, lagrimas, regaloMano, mats, tonos, alegria: siempreFeliz ? 1 : 0, objetivo: siempreFeliz ? 1 : 0, siempreFeliz, inclinacion, lagrima, muyTriste: false, salto: 0, temporizador: null };
+  poseNino(n, 0);
+  return n;
+}
+
+function poseNino(n, tiempo) {
+  const p = suave(n.alegria);
+  n.cuerpo.position.y = lerp(-0.36, 0, p);
+  n.piernas.forEach((b) => { b.rotation.x = lerp(-1.35, 0, p); });
+  n.brazos.forEach((b, i) => {
+    const s = i === 0 ? -1 : 1;
+    b.rotation.x = lerp(-0.75, -1.05, p);
+    b.rotation.z = lerp(-s * 0.35, -s * 0.12, p);
+  });
+  const llanto = n.muyTriste && p < 0.3 ? 1 : 0;
+  n.cuello.rotation.x = lerp(0.3 + llanto * 0.1, 0, p);
+  n.cuello.rotation.z = lerp(n.inclinacion * (1 + llanto), 0, p);
+  n.boca.rotation.z = p > 0.5 ? Math.PI : 0;
+  n.boca.scale.set(1, llanto ? 1.6 : 1, 1);
+  n.mejilla.opacity = limitar((p - 0.5) * 2, 0, 0.8);
+  n.ceja.opacity = limitar(1 - p * 2, 0, 1);
+  n.lagrimas.forEach((l, i) => {
+    const visible = (llanto || (n.lagrima && i < 1)) && p < 0.3;
+    const ciclo = llanto ? ((tiempo * 0.9 + l.userData.fase) % 1) : 0.3;
+    l.position.y = 0.26 - ciclo * 0.17;
+    l.material.opacity = visible ? (llanto ? 1 - ciclo : 0.9) : 0;
+  });
+  if (!n.siempreFeliz) n.regaloMano.scale.setScalar(0.32 * limitar((p - 0.4) / 0.6, 0, 1));
+  for (const clave in n.mats) n.mats[clave].color.lerpColors(n.tonos[clave][0], n.tonos[clave][1], p);
+  n.cuerpo.position.y += llanto ? Math.abs(Math.sin(tiempo * 9)) * 0.022 : 0;
+  if (n.salto > 0) {
+    const t = 1 - n.salto / 1.1;
+    n.cuerpo.position.y += t < 0.5 ? Math.max(0, Math.sin(t * 2 * Math.PI) * 0.35) : 0;
+    const vuelo = t > 0.2 && t < 0.85 ? Math.sin(((t - 0.2) / 0.65) * Math.PI) * 1.1 : 0;
+    n.regaloMano.position.y = 0.86 + vuelo;
+    n.regaloMano.rotation.x = vuelo * 3;
+    n.brazos.forEach((b) => { b.rotation.x = lerp(-1.05, -2.7, Math.min(1, vuelo * 2)); });
+  } else {
+    n.regaloMano.position.y = 0.86;
+    n.regaloMano.rotation.x = 0;
+  }
+}
+
+/* ---------- 8. El mundo ---------- */
+
+// Cielo pintado, muy al fondo (no le afecta la niebla)
+const ZCIELO = -14;
+const kCielo = (D - ZCIELO) / D;
+function planoCielo(textura, x0, x1, opacidad = 1) {
+  const plano = new THREE.Mesh(
+    new THREE.PlaneGeometry((x1 - x0) * kCielo, 12 * kCielo * 1.04),
+    new THREE.MeshBasicMaterial({ map: textura, transparent: opacidad < 1, opacity: opacidad, depthWrite: false, fog: false })
   );
-
-  return Math.max(escala, 0.1);
+  plano.position.set(((x0 + x1) / 2) * kCielo, 0, ZCIELO);
+  return plano;
 }
+const texCieloFeliz = texturaCielo(true);
+const cieloFeliz = planoCielo(texCieloFeliz, -4.24, 0);
+const cieloTriste = planoCielo(texturaCielo(false), 0, 4.24);
+const cieloTristeCalido = planoCielo(texCieloFeliz, 0, 4.24, 0.0001);
+cieloTristeCalido.position.z += 0.01;
+escena.add(cieloFeliz, cieloTriste, cieloTristeCalido);
 
-/* ---------- 5. Preparación de la tipografía ---------- */
-
-// Sustituye el texto de una fila por una <span> por letra.
-// El texto completo se conserva en aria-label para los lectores de pantalla.
-function partirEnLetras(fila) {
-  const texto = fila.textContent.trim();
-  fila.setAttribute("aria-label", texto);
-  fila.textContent = "";
-
-  Array.from(texto).forEach((caracter) => {
-    const letra = document.createElement("span");
-    letra.className = caracter === " " ? "letra letra--espacio" : "letra";
-    letra.textContent = caracter === " " ? "" : caracter;
-    letra.setAttribute("aria-hidden", "true");
-    fila.appendChild(letra);
-  });
+// Lunas con cráteres y halo
+function crearLuna(px, brillante) {
+  const g = new THREE.Group();
+  g.position.copy(enPantalla(px, 520, -12));
+  const k = (D + 12) / D;
+  g.add(malla(geoEsfera, new THREE.MeshBasicMaterial({ map: texturaLuna(brillante), fog: false }), 0, 0, 0, 0.24 * k));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaDestello, color: brillante ? "#fff1c4" : "#7d8799", transparent: true, opacity: brillante ? 0.32 : 0.12, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(1.6 * k);
+  g.add(halo);
+  return g;
 }
+// Una sola luna, en el cielo de la Navidad feliz
+escena.add(crearLuna(340, true));
 
-// Calcula el tamaño de letra con el que la fila ocupa exactamente su ancho.
-// Se mide a 100px y se aplica una regla de tres.
-function ajustarFilaAlAncho(fila) {
-  const anchoObjetivo = Number(fila.dataset.ancho);
-  fila.style.setProperty("--ancho", anchoObjetivo);
-  fila.style.fontSize = "100px";
-
-  const anchoMedido = Array.from(fila.children)
-    .reduce((total, letra) => total + letra.offsetWidth, 0);
-
-  fila.style.fontSize = `${((100 * anchoObjetivo) / anchoMedido).toFixed(2)}px`;
-}
-
-// Centro de un elemento en coordenadas del cartel (sin contar el escalado)
-function obtenerCentroEnCartel(elemento) {
-  let x = elemento.offsetWidth / 2;
-  let y = elemento.offsetHeight / 2;
-
-  for (let nodo = elemento; nodo && nodo !== cartel; nodo = nodo.offsetParent) {
-    x += nodo.offsetLeft;
-    y += nodo.offsetTop;
+// Suelo nevado con dunas suaves (textura fotográfica); el del lado oscuro es gris y se aclara al donar.
+// Es mucho más ancho y profundo de lo que se ve, para que su borde nunca asome en los laterales.
+const SUELO_ANCHO = 10;  // por cada lado (de 0 a ±10)
+const SUELO_FONDO = 26;  // de z = +4 a z = -22
+function crearSuelo(lado, x0) {
+  const geo = new THREE.PlaneGeometry(SUELO_ANCHO, SUELO_FONDO, 120, 200);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) + x0, z = pos.getZ(i) - 9;
+    const plano = limitar((z + 1.5) / 3, 0, 1); // delante (donde están los niños) casi plano
+    pos.setY(i, fbm(x * 0.8, z * 0.8) * 0.25 * (1 - plano) + fbm(x * 3, z * 3) * 0.02);
   }
-
-  return { x, y };
+  geo.computeVertexNormals();
+  const tex = texturaPBR("snow_02", 9, 24);
+  const m = lado.m("#ffffff", "#6f7787", { ...tex, roughness: 1, normalScale: new THREE.Vector2(0.8, 0.8) });
+  const suelo = new THREE.Mesh(geo, m);
+  suelo.position.set(x0, SUELO, -9);
+  suelo.receiveShadow = true;
+  return suelo;
 }
+escena.add(crearSuelo(LADO_FELIZ, -SUELO_ANCHO / 2), crearSuelo(LADO_TRISTE, SUELO_ANCHO / 2));
 
-function prepararTipografia() {
-  filas.forEach(partirEnLetras);
-  filas.forEach(ajustarFilaAlAncho);
+// Pueblos
+function construirPueblo(lado, dx) {
+  const g = new THREE.Group();
+  const espejo = (x) => (dx > 0 ? -x : x);
+  // colina del fondo
+  const colina = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20), lado.m("#f2f0f4", "#5a6070", { ...texturaPBR("snow_02", 6, 3), roughness: 1 }));
+  colina.scale.set(4.2, 1.25, 1.8);
+  colina.position.set(dx * 2.4, -3.5, -8.4);
+  colina.receiveShadow = true;
+  g.add(colina);
+  // loma más ancha detrás, que llega hasta más allá de los bordes del cartel
+  const loma = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 20), colina.material);
+  loma.scale.set(8, 1.0, 2.2);
+  loma.position.set(dx * 5, -3.6, -11.5);
+  loma.receiveShadow = true;
+  g.add(loma);
 
-  letras = Array.from(tipografia.querySelectorAll(".letra:not(.letra--espacio)")).map((elemento) => ({
-    elemento,
-    centro: obtenerCentroEnCartel(elemento),
-    influencia: 0,
-  }));
-  letras.forEach((letra) => {
-    letra.oscura = letra.centro.x > MITAD;
-    pintarLetra(letra);
+  const paredes = [
+    { pared: "castle_brick_02_white", tono: "#f4ead8" }, { pared: "dark_wooden_planks", tono: "#c98f62" },
+    { pared: "castle_brick_02_white", tono: "#d9a48a" }, { pared: "dark_wooden_planks", tono: "#a8c4a0" },
+    { pared: "castle_brick_02_white", tono: "#ffffff" },
+  ];
+  // casas lejanas en la colina
+  [[-3.75, -2.45, 1.0, 0.95], [-2.6, -2.4, 0.9, 0.85], [-1.6, -2.45, 0.85, 1.0]].forEach(([x, y, ancho, alto], i) => {
+    const p = paredes[i % paredes.length];
+    const casa = crearCasa(lado, { ancho, alto, fondo: 0.8, pared: p.pared, tono: p.tono, tonoFrio: "#3a3e48", plantas: 1 });
+    casa.position.set(espejo(x), y, -7.6);
+    casa.traverse((m) => { if (m.isMesh) m.castShadow = false; });
+    g.add(casa);
   });
-
-  tipografia.classList.add("esta-lista");
-}
-
-/* ---------- 6. Pintado y bucle de animación ---------- */
-
-// Una letra iluminada pierde peso y se vuelve dorada.
-// Las del lado oscuro parten apagadas: el cursor las enciende.
-function pintarLetra(letra) {
-  const peso = interpolar(TIPO.pesoMax, TIPO.pesoMin, letra.influencia);
-  const desde = letra.oscura
-    ? COLOR.apagado.map((canal, i) => interpolar(canal, COLOR.crema[i], encendidoTotal))
-    : COLOR.crema;
-  const hacia = COLOR.dorado;
-
-  letra.elemento.style.fontVariationSettings = `"wght" ${peso.toFixed(0)}, "wdth" ${TIPO.anchura}`;
-  letra.elemento.style.color = mezclarColor(desde, hacia, letra.influencia);
-
-  const sombra = letra.oscura
-    ? mezclarColor(SOMBRA.oscura, SOMBRA.feliz, encendidoTotal)
-    : mezclarColor(SOMBRA.feliz, SOMBRA.feliz, 0);
-  letra.elemento.style.setProperty("--sombra", sombra);
-}
-
-function pintarLuz() {
-  const { x, y, opacidad } = luz.actual;
-
-  // Halo: se mueve con transform y opacity (no se heredan, no recalculan la escena)
-  halo.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-  halo.style.opacity = opacidad.toFixed(3);
-
-  // Máscara de la capa iluminada (empieza en x = 424, la mitad del cartel)
-  // Se escribe la máscara entera, sin variables CSS: las variables se heredan y
-  // obligarían a recalcular los estilos de cientos de elementos de la escena
-  const mascara = `radial-gradient(circle ${Math.max(luz.actual.radio, 0.01).toFixed(1)}px at `
-    + `${(x - MITAD).toFixed(1)}px ${y.toFixed(1)}px, #000 55%, transparent 100%)`;
-  capaLuz.style.webkitMaskImage = mascara;
-  capaLuz.style.maskImage = mascara;
-
-  // Paralaje 3D: los cubos se ven desde donde está el cursor
-  if (!movimientoReducido) {
-    capasLluvia.forEach((capa) => {
-      const origenX = x - capa.offsetLeft;
-      capa.style.perspectiveOrigin = `${origenX.toFixed(0)}px ${y.toFixed(0)}px`;
+  // iglesia con torre
+  const iglesia = new THREE.Group();
+  const piedra = lado.m("#efe6d6", "#3a3e48", { ...texturaPBR("castle_brick_02_white", 1, 3), roughness: 1 });
+  iglesia.add(malla(geoCaja, piedra, 0, 1.0, 0, 0.5, 2.0, 0.5));
+  iglesia.add(malla(new THREE.ConeGeometry(0.4, 0.9, 4), lado.m("#5a2a22", "#23262e", { ...texturaPBR("clay_roof_tiles_02", 1, 1) }), 0, 2.45, 0).rotateY(Math.PI / 4));
+  iglesia.add(malla(geoCaja, lado.luz("#ffc46b", 3), 0, 1.35, 0.255, 0.14, 0.26, 0.01));
+  iglesia.add(malla(geoCaja, lado.luz("#ffc46b", 3), 0, 0.7, 0.255, 0.14, 0.26, 0.01));
+  iglesia.add(malla(new THREE.OctahedronGeometry(0.1), lado.luz("#ffd166", 6), 0, 3.05, 0));
+  sombras(iglesia);
+  iglesia.position.set(espejo(-0.6), -2.6, -8.1);
+  g.add(iglesia);
+  // casas del pueblo, en primer término
+  [[-4.35, 1.6, 1.75, -4.8], [-2.6, 1.45, 1.5, -5.4], [-0.95, 1.5, 1.85, -4.8]].forEach(([x, ancho, alto, z], i) => {
+    const p = paredes[(i * 2 + 1) % paredes.length];
+    const casa = crearCasa(lado, { ancho, alto, fondo: 1.2, pared: p.pared, tono: p.tono, tonoFrio: "#3b3f4a" });
+    casa.position.set(espejo(x), SUELO, z);
+    g.add(casa);
+  });
+  // abetos alrededor del pueblo
+  [[-3.1, -2.42, -7.3, 0.8], [-2.1, -2.45, -7.4, 0.7], [-3.45, SUELO, -3.6, 1.4], [-1.75, SUELO, -3.7, 1.2], [-4.6, SUELO, -2.9, 1.3]].forEach(([x, y, z, h]) => {
+    const abeto = crearAbeto(h, h * 0.38, 0.5, false);
+    abeto.position.set(espejo(x), y, z);
+    if (!lado.feliz) abeto.traverse((m) => { if (m.isMesh && m.material === materialRamas) m.material = materialRamasFrias; });
+    g.add(abeto);
+  });
+  // farolas reales (Poly Haven)
+  [[-2.85, -3.4], [-0.3, -3.3]].forEach(([x, z]) => {
+    cargarModelo("street_lamp_01", (lamp) => {
+      lamp.scale.setScalar(0.5);
+      lamp.position.set(espejo(x), SUELO, z);
+      if (!lado.feliz) lamp.rotation.z = -0.08;
+      lamp.traverse((m) => {
+        if (m.isMesh && /bulb|glass/.test(m.material.name)) {
+          m.material = lado.feliz
+            ? mat("#ffe2a8", { emissive: "#ffc46b", emissiveIntensity: 6 })
+            : matPar("#1a1c22", "#ffe2a8", { emissive: "#ffc46b", emisivoFrio: 0, emisivoCalido: 6 });
+        }
+      });
+      g.add(lamp);
     });
-  }
-
-  const lecturaX = String(Math.round(x)).padStart(4, "0");
-  const lecturaY = String(Math.round(y)).padStart(4, "0");
-  lectura.textContent = `X ${lecturaX} · Y ${lecturaY}`;
+  });
+  // vecinos del pueblo
+  [["#c8102e", "#f2c6a0", -3.3, -2.9], ["#1d4e89", "#8d5524", -2.9, -3.1], ["#1f6b3a", "#e0ac69", -1.75, -2.8], ["#c9a227", "#b97a56", -0.95, -3.0], ["#7a1f5c", "#f2c6a0", -0.3, -2.7]].forEach(([color, piel, x, z]) => {
+    const v = crearVecino(lado, color, piel);
+    v.position.set(espejo(x), SUELO, z);
+    g.add(v);
+  });
+  return g;
 }
 
-// Bucle de animación: acerca cada valor a su objetivo y se detiene cuando todo ha llegado
-function animar() {
-  let cambioMaximo = 0;
+// Ramas apagadas y nevadas para los abetos del lado oscuro
+const materialRamasFrias = matPar("#5a6866", "#ffffff", { map: texturaRama, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.95, envMapIntensity: 0.3 });
 
-  letras.forEach((letra) => {
-    const distancia = Math.hypot(letra.centro.x - raton.x, letra.centro.y - raton.y);
-    const objetivo = raton.dentro ? calcularInfluencia(distancia) : 0;
-    const siguiente = interpolar(letra.influencia, objetivo, TIPO.suavizado);
+function crearVecino(lado, color, piel) {
+  const g = new THREE.Group();
+  const ropa = lado.feliz ? telaMat(color) : matPar("#2e3139", color, { map: texturaPunto, roughness: 1 });
+  const cara = lado.m(piel, "#5e554d");
+  g.add(malla(new THREE.CylinderGeometry(0.075, 0.11, 0.3, 12), ropa, 0, 0.22, 0));
+  g.add(malla(geoEsfera, cara, 0, 0.44, lado.feliz ? 0 : 0.04, 0.08));
+  g.add(malla(new THREE.SphereGeometry(0.085, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), ropa, 0, 0.47, lado.feliz ? 0 : 0.04));
+  for (const s of [-1, 1]) {
+    const b = malla(new THREE.CapsuleGeometry(0.022, 0.15, 3, 6), ropa, s * 0.11, lado.feliz ? 0.4 : 0.22, 0);
+    b.rotation.z = lado.feliz ? s * -0.5 : s * 0.15;
+    g.add(b);
+  }
+  if (!lado.feliz) g.rotation.x = 0.35;
+  g.scale.setScalar(1.15);
+  return sombras(g);
+}
 
-    cambioMaximo = Math.max(cambioMaximo, Math.abs(siguiente - letra.influencia));
-    if (Math.abs(siguiente - letra.influencia) > 0.0005) {
-      letra.influencia = Math.abs(objetivo - siguiente) < 0.001 ? objetivo : siguiente;
-      pintarLetra(letra);
+escena.add(construirPueblo(LADO_FELIZ, -1));
+escena.add(construirPueblo(LADO_TRISTE, 1));
+
+// Árboles protagonistas
+const ARBOL_X = enPantalla(212, 0, -0.8).x;
+const arbolFeliz = crearArbolNavidad();
+arbolFeliz.position.set(ARBOL_X, SUELO, -0.8);
+escena.add(arbolFeliz);
+const arbolSeco = crearArbolSeco();
+arbolSeco.position.set(-ARBOL_X, SUELO, -0.8);
+escena.add(arbolSeco);
+
+// Caja de cartón vacía (modelo real de Poly Haven)
+const cajaVacia = new THREE.Group();
+cajaVacia.position.set(enPantalla(640, 0, 0.9).x, SUELO + 0.22, 0.9);
+cajaVacia.rotation.y = 0.5;
+escena.add(cajaVacia);
+const materialesCaja = [];
+cargarModelo("cardboard_box_01", (caja) => {
+  caja.scale.setScalar(1.25);
+  caja.traverse((m) => {
+    if (m.isMesh) {
+      m.material = m.material.clone();
+      m.material.transparent = true;
+      materialesCaja.push(m.material);
     }
   });
+  cajaVacia.add(caja);
+});
 
-  ["x", "y", "opacidad", "radio"].forEach((clave) => {
-    // El radio grande (donar) se abre y se cierra más despacio que el resto
-    const lento = clave === "radio"
-      && Math.max(luz.actual.radio, luz.objetivo.radio) > LUZ_ESCENA.radio + 1;
-    const factor = lento ? LUZ_ESCENA.suavizadoDonando : TIPO.suavizado;
-    const siguiente = interpolar(luz.actual[clave], luz.objetivo[clave], factor);
-    const escalaCambio = clave === "opacidad" ? 1 : 0.01; // píxeles frente a opacidad
-    cambioMaximo = Math.max(cambioMaximo, Math.abs(siguiente - luz.actual[clave]) * escalaCambio);
-    luz.actual[clave] = siguiente;
+// Faroles de latón (Poly Haven) junto a la puerta de las casas cercanas del lado feliz
+[[-4.35, -3.9], [-0.95, -3.9]].forEach(([x, z]) => {
+  cargarModelo("Lantern_01", (farol) => {
+    farol.scale.setScalar(1.3);
+    farol.position.set(x + 0.42, SUELO, z);
+    farol.traverse((m) => { if (m.isMesh && /glass/i.test(m.material.name)) m.material = mat("#ffe2a8", { emissive: "#ffb35c", emissiveIntensity: 5, transparent: true, opacity: 0.85 }); });
+    escena.add(farol);
   });
-  pintarLuz();
+});
 
-  // Cuanto más se abre la luz hacia todo el lado, más se encienden sus letras
-  const siguienteEncendido = Math.min(Math.max(
-    (luz.actual.radio - LUZ_ESCENA.radio) / (LUZ_ESCENA.radioDonando - LUZ_ESCENA.radio), 0), 1);
-  if (Math.abs(siguienteEncendido - encendidoTotal) > 0.001) {
-    encendidoTotal = siguienteEncendido;
-    letras.filter((letra) => letra.oscura).forEach(pintarLetra);
-  }
-
-  fotogramaPendiente = cambioMaximo > 0.0005 ? requestAnimationFrame(animar) : null;
-}
-
-// Arranca el bucle solo si no está ya en marcha
-function solicitarAnimacion() {
-  if (fotogramaPendiente === null) {
-    fotogramaPendiente = requestAnimationFrame(animar);
-  }
-}
-
-/* ---------- 7. Interacción · mousemove ---------- */
-
-// Radio que debe tener la luz de la escena según dónde esté el cursor
-function calcularRadioLuz() {
-  if (estrellaEncendida) return LUZ_ESCENA.radioDonando;
-  return raton.dentro ? LUZ_ESCENA.radio : 0;
-}
-
-// Guarda la posición del cursor; el bucle de animación hace el resto
-function seguirCursor(evento) {
-  const posicion = obtenerPosicionEnCartel(evento);
-
-  raton.x = posicion.x;
-  raton.y = posicion.y;
-  raton.dentro = true;
-
-  luz.objetivo.x = posicion.x;
-  luz.objetivo.y = posicion.y;
-  luz.objetivo.opacidad = 1;
-  luz.objetivo.radio = calcularRadioLuz();
-  solicitarAnimacion();
-
-  comprobarNinos(posicion.x, posicion.y);
-}
-
-// Cuando el cursor abandona el cartel, las letras recuperan su peso y la luz se apaga
-function soltarCursor() {
-  raton.dentro = false;
-  luz.objetivo.opacidad = 0;
-  luz.objetivo.radio = calcularRadioLuz();
-  solicitarAnimacion();
-}
-
-/* ---------- 8. Interacción · mouseenter y mouseleave ---------- */
-
-// Aplica un estado visual a la estrella. Modifica dos propiedades desde JS:
-// transform (escala y giro) y fill (color del polígono).
-function aplicarEstadoEstrella(estado) {
-  estrella.style.transform = estado.transform;
-  poligonoEstrella.style.fill = estado.relleno;
-}
-
-// mouseenter: la estrella crece, gira y se vuelve crema
-function encenderEstrella() {
-  aplicarEstadoEstrella(ESTRELLA.encendida);
-  estrella.classList.add("esta-encendida");
-
-  // Donar enciende toda su Navidad: la luz se abre por todo el lado oscuro
-  estrellaEncendida = true;
-  cartel.classList.add("esta-donando");
-  descongelarLadoOscuro();
-  // Los niños felices cargan el árbol y los regalos y corren a llevar la Navidad;
-  // al llegar, los niños tristes se levantan uno detrás de otro
-  enviarCaravana();
-  luz.objetivo.radio = calcularRadioLuz();
-  solicitarAnimacion();
-}
-
-// mouseleave: vuelve suavemente a su tamaño, giro y color originales
-function apagarEstrella() {
-  aplicarEstadoEstrella(ESTRELLA.reposo);
-  estrella.classList.remove("esta-encendida");
-
-  estrellaEncendida = false;
-  cartel.classList.remove("esta-donando");
-  // Sin tu donación todo se congela: los regalos se quedan helados donde
-  // estén y los niños se sientan y lloran
-  congelarLadoOscuro();
-  volverCaravana(); // vuelven corriendo a casa con el árbol
-  luz.objetivo.radio = calcularRadioLuz();
-  solicitarAnimacion();
-}
-
-/* ---------- 8b. Niños que saltan ---------- */
-
-// Cada niño feliz sabe dónde está (data-x / data-y, en coordenadas del cartel).
-const SALTO = {
-  duracion: 1100, // ms, igual que la animación "saltar" del CSS
-  anchoMedio: 34, // zona sensible alrededor de cada niño (se multiplica por su escala)
-  altoMedio: 88,
-};
-
-const ninos = Array.from(document.querySelectorAll(".nino")).map((elemento) => ({
-  elemento,
-  x: Number(elemento.dataset.x),
-  y: Number(elemento.dataset.y),
-  escala: Number(elemento.dataset.escala),
-  saltando: false,
-}));
-
-function estaEncima(nino, x, y) {
-  return Math.abs(x - nino.x) < SALTO.anchoMedio * nino.escala
-    && Math.abs(y - nino.y) < SALTO.altoMedio * nino.escala;
-}
-
-function hacerSaltar(nino) {
-  if (nino.saltando) return;
-  nino.saltando = true;
-  nino.elemento.classList.add("saltando");
-  setTimeout(() => {
-    nino.elemento.classList.remove("saltando");
-    nino.saltando = false;
-  }, SALTO.duracion);
-}
-
-/* Niños tristes del lado oscuro: al pasar el cursor se levantan felices.
-   Se quedan así un rato después de que el cursor se vaya y luego se vuelven
-   a sentar (salvo mientras el cursor está en la estrella de donar). */
-const ALEGRIA = {
-  dura: 2600,     // ms que siguen felices después de que el cursor se vaya
-  anchoMedio: 36,
-  altoMedio: 72,
-};
-
-const ninosTristes = Array.from(document.querySelectorAll(".cambia")).map((elemento) => ({
-  elemento,
-  x: Number(elemento.dataset.x),
-  y: Number(elemento.dataset.y),
-  escala: Number(elemento.dataset.escala),
-  temporizador: null,
-}));
-
-function alegrar(nino) {
-  clearTimeout(nino.temporizador);
-  nino.elemento.classList.remove("muy-triste");
-  nino.elemento.classList.add("feliz");
-  nino.temporizador = setTimeout(() => entristecer(nino), ALEGRIA.dura);
-}
-
-function entristecer(nino) {
-  if (estrellaEncendida) return; // mientras se dona, todos siguen felices
-  nino.elemento.classList.remove("feliz");
-  // Si el lado oscuro está congelado, no vuelven a estar tristes: vuelven a llorar
-  if (lados.triste.congelado) nino.elemento.classList.add("muy-triste");
-}
-
-// Se sientan uno detrás de otro y rompen a llorar
-function entristecerTodos() {
-  esperasCadena.forEach(clearTimeout);
-  esperasCadena = ninosTristes.map((nino, orden) => setTimeout(() => {
-    clearTimeout(nino.temporizador);
-    nino.elemento.classList.remove("feliz");
-    nino.elemento.classList.add("muy-triste");
-  }, orden * 140));
-}
-
-/* Caravana: el árbol y los niños felices cruzan al lado oscuro al donar */
-const CARAVANA = { viaje: 2400 }; // ms, igual que la transición del CSS
-let estadoCaravana = "casa"; // casa · yendo · alli · volviendo
-let esperaCaravana = null;
-
-function enviarCaravana() {
-  clearTimeout(esperaCaravana);
-  estadoCaravana = "yendo";
-  cartel.classList.add("caravana-fuera", "caravana-corriendo");
-  esperaCaravana = setTimeout(() => {
-    estadoCaravana = "alli";
-    cartel.classList.remove("caravana-corriendo");
-    levantarEnCadena();
-  }, movimientoReducido ? 0 : CARAVANA.viaje);
-}
-
-function volverCaravana() {
-  clearTimeout(esperaCaravana);
-  estadoCaravana = "volviendo";
-  cartel.classList.remove("caravana-fuera");
-  cartel.classList.add("caravana-corriendo");
-  esperaCaravana = setTimeout(() => {
-    estadoCaravana = "casa";
-    cartel.classList.remove("caravana-corriendo");
-  }, movimientoReducido ? 0 : CARAVANA.viaje);
-}
-
-// Al donar, la luz avanza desde la estrella: se levantan primero los más cercanos
-let esperasCadena = [];
-
-function levantarEnCadena() {
-  const estrellaX = 636;
-  const estrellaY = 503;
-  esperasCadena.forEach(clearTimeout);
-  esperasCadena = [...ninosTristes]
-    .sort((a, b) => Math.hypot(a.x - estrellaX, a.y - estrellaY) - Math.hypot(b.x - estrellaX, b.y - estrellaY))
-    .map((nino, orden) => setTimeout(() => alegrar(nino), 350 + orden * 260));
-}
-
-function comprobarNinos(x, y) {
-  if (estadoCaravana === "casa") {
-    ninos.forEach((nino) => {
-      if (estaEncima(nino, x, y)) hacerSaltar(nino);
-    });
-  }
-  ninosTristes.forEach((nino) => {
-    if (Math.abs(x - nino.x) < ALEGRIA.anchoMedio * nino.escala
-        && Math.abs(y - nino.y) < ALEGRIA.altoMedio * nino.escala) {
-      alegrar(nino);
-    }
-  });
-}
-
-/* ---------- 8c. Regalos y nieve que caen y se acumulan ---------- */
-
-const CAIDA = {
-  suelo: 1036,            // donde empieza la franja del pie
-  velocidad: [70, 120],   // px por segundo
-  tamano: [22, 36],       // lado del cubo
-  celda: 4,               // ancho de cada columna del mapa de alturas
-  maxApilados: { feliz: 14, triste: 30 },
-  alturaMaxima: { feliz: 30, triste: 46 }, // la pila no tapa a los niños
-  cadaFeliz: [1.2, 2.2],  // segundos entre regalos en el lado feliz
-  cadaDonando: 0.22,      // con el cursor en la estrella llueven regalos en el oscuro
-  nievePorCopo: 0.16,     // px que crece el manto con cada copo que llega al suelo
-  nieveMaxima: 24,
-};
-
-const COLORES_REGALO = [
-  ["#ffd166", "#e63946"], ["#5aa9ff", "#fff1e6"], ["#ffb3d1", "#1f8a45"],
-  ["#fff1e6", "#e63946"], ["#e63946", "#ffd166"], ["#2a9d8f", "#fff1e6"],
+// Niños
+const FELICES = [
+  { px: 70, z: 0.2, e: 1, feliz: { abrigo: "#b3121f", piel: "#f2c6a0", gorro: "#f2e6c9", banda: "#b3121f", bufanda: "#f2e6c9" }, regalo: 0, destino: 448 },
+  { px: 360, z: 0.2, e: 1, feliz: { abrigo: "#c9a227", piel: "#b97a56", gorro: "#1f6b3a", banda: "#f2e6c9", bufanda: "#1f6b3a" }, regalo: 1, destino: 650 },
+  { px: 140, z: 0.95, e: 0.86, feliz: { abrigo: "#1d4e89", piel: "#8d5524", gorro: "#c9a227", banda: "#f2e6c9", bufanda: "#b3121f" }, regalo: 2, mejillas: "#b0566a", destino: 640 },
+  { px: 300, z: 0.95, e: 0.86, feliz: { abrigo: "#23867a", piel: "#e0ac69", gorro: "#b3121f", banda: "#f2e6c9", bufanda: "#c9a227" }, regalo: 3, destino: 818 },
+];
+const TRISTES = [
+  { px: 494, z: 0.2, e: 1, triste: { abrigo: "#4a3a40", piel: "#a88a73", gorro: "#4a4f5a", banda: "#4a3a40", bufanda: "#3a3f4a" }, feliz: { abrigo: "#7b4bb5", piel: "#f2c6a0", gorro: "#c9a227", banda: "#b3121f", bufanda: "#1f6b3a" }, regalo: 4, lagrima: true, inclinacion: 0.15 },
+  { px: 784, z: 0.2, e: 1, triste: { abrigo: "#45412f", piel: "#7a5c48", gorro: "#26352c", banda: "#4a4f5a", bufanda: "#26352c" }, feliz: { abrigo: "#b3121f", piel: "#b97a56", gorro: "#1d4e89", banda: "#f2e6c9", bufanda: "#c9a227" }, regalo: 5, inclinacion: -0.15 },
+  { px: 564, z: 0.95, e: 0.86, triste: { abrigo: "#2e3a50", piel: "#5e4637", gorro: "#3a3f4a", banda: "#2e3a50", bufanda: "#45412f" }, feliz: { abrigo: "#e0702c", piel: "#8d5524", gorro: "#1f6b3a", banda: "#f2e6c9", bufanda: "#1d4e89" }, regalo: 2, mejillas: "#b0566a", lagrima: true, inclinacion: -0.12 },
+  { px: 724, z: 0.95, e: 0.86, triste: { abrigo: "#243b38", piel: "#9c8068", gorro: "#4a3a40", banda: "#3a3f4a", bufanda: "#2e3a50" }, feliz: { abrigo: "#d64a86", piel: "#e0ac69", gorro: "#c9a227", banda: "#f2e6c9", bufanda: "#23867a" }, regalo: 1, inclinacion: 0.12 },
 ];
 
-const azar = (min, max) => min + Math.random() * (max - min);
+const ninosFelices = FELICES.map((d) => {
+  const n = crearNino({ feliz: d.feliz, regalo: d.regalo, mejillas: d.mejillas }, true);
+  n.casa = enPantalla(d.px, 0, d.z).x;
+  n.destino = enPantalla(d.destino, 0, d.z).x;
+  n.raiz.position.set(n.casa, SUELO, d.z);
+  n.raiz.scale.setScalar(d.e);
+  n.escala = d.e;
+  escena.add(n.raiz);
+  return n;
+});
+const ninosTristes = TRISTES.map((d) => {
+  const n = crearNino(d, false);
+  n.raiz.position.set(enPantalla(d.px, 0, d.z).x, SUELO, d.z);
+  n.raiz.scale.setScalar(d.e);
+  n.escala = d.e;
+  escena.add(n.raiz);
+  return n;
+});
 
-function crearLado(nombre) {
-  const capaNieve = document.querySelector(`.nieve--${nombre}`);
-  return {
-    nombre,
-    capa: document.getElementById(`lluvia-${nombre}`),
-    manto: capaNieve.querySelector(".nieve__manto"),
-    capaNieve,
-    alturas: new Float32Array(Math.ceil(MITAD / CAIDA.celda)),
-    nieve: 0,
-    cayendo: [],
-    posados: [],
-    proximo: 0,
-    congelado: false,
-  };
+/* ---------- 9. Lema 3D y estrella de donar ---------- */
+
+const letras = [];
+const LEMA_Z = 0.8;
+const matLetraCanto = new THREE.MeshStandardMaterial({ color: "#6a0f1c", roughness: 0.35, metalness: 0.2, envMapIntensity: 0.8 });
+
+function crearLema(fuente) {
+  const kz = (D - LEMA_Z) / D;
+  const anchoObjetivo = 7.68 * kz;
+  [{ texto: "ILUMINA", arriba: 4.42 }, { texto: "SU NAVIDAD.", arriba: 2.72 }].forEach(({ texto, arriba }) => {
+    const grupo = new THREE.Group();
+    let cursorX = 0;
+    const piezas = [];
+    for (const ch of texto) {
+      if (ch === " ") { cursorX += 0.35; continue; }
+      const geo = new TextGeometry(ch, { font: fuente, size: 1, height: 0.32, depth: 0.32, curveSegments: 8, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.028, bevelSegments: 4 });
+      geo.computeBoundingBox();
+      const ancho = geo.boundingBox.max.x - geo.boundingBox.min.x;
+      geo.translate(-geo.boundingBox.min.x - ancho / 2, 0, 0);
+      const cara = new THREE.MeshPhysicalMaterial({ color: C.crema, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1, emissive: "#000000" });
+      const letra = new THREE.Mesh(geo, [cara, matLetraCanto]);
+      letra.position.x = cursorX + ancho / 2;
+      piezas.push({ letra, ancho });
+      cursorX += ancho + 0.06;
+      grupo.add(letra);
+    }
+    const total = cursorX - 0.06;
+    const escala = anchoObjetivo / total;
+    grupo.scale.setScalar(escala);
+    piezas.forEach((p) => { p.letra.position.x -= total / 2; });
+    const altoLinea = 0.72 * escala;
+    grupo.position.set(0, arriba * kz - altoLinea, LEMA_Z);
+    escena.add(grupo);
+    grupo.updateMatrixWorld(true);
+    piezas.forEach(({ letra }) => {
+      const centro = new THREE.Vector3();
+      letra.getWorldPosition(centro);
+      centro.y += altoLinea / 2;
+      letras.push({ letra, material: letra.material[0], lado: centro.x < 0 ? "feliz" : "triste", base: letra.position.z, influencia: 0, centro: aPixeles(centro) });
+    });
+  });
+}
+new FontLoader().load(FUENTE_3D, crearLema, undefined, () => {
+  cartel.classList.remove("esta-listo");
+  avisoTexto.textContent = "";
+});
+
+const COLOR_LETRA = { feliz: new THREE.Color(C.crema), apagada: new THREE.Color("#5d6370"), dorada: new THREE.Color("#ffcf6b") };
+const _base = new THREE.Color();
+// Cada letra es un pequeño muelle: se adelanta y se gira poco a poco hacia la luz del
+// cursor (como si la mirara) y, al irse la luz, vuelve a su sitio con un rebote suave.
+const MUELLE = { rigidez: 70, amortiguacion: 11, alcance: 280, adelanto: 0.2, giro: 0.38 };
+
+function muelle(estado, clave, objetivo, dt) {
+  const v = `v${clave}`;
+  const aceleracion = MUELLE.rigidez * (objetivo - estado[clave]) - MUELLE.amortiguacion * (estado[v] || 0);
+  estado[v] = (estado[v] || 0) + aceleracion * dt;
+  estado[clave] += estado[v] * dt;
 }
 
+function pintarLetras(dt) {
+  const paso = Math.min(dt, 1 / 30); // estable aunque un fotograma tarde
+  letras.forEach((l) => {
+    if (l.z === undefined) Object.assign(l, { z: 0, rx: 0, ry: 0 });
+    const dx = luzCursor.x - l.centro.x;
+    const dy = luzCursor.y - l.centro.y;
+    const cerca = raton.dentro ? suave(limitar(1 - Math.hypot(dx, dy) / MUELLE.alcance, 0, 1)) * luzCursor.intensidad : 0;
+    // la influencia (color) sube y baja suave; la forma la mueve el muelle
+    l.influencia = lerp(l.influencia, cerca, Math.min(1, dt * 6));
+    const ox = limitar(dx / MUELLE.alcance, -1, 1);
+    const oy = limitar(dy / MUELLE.alcance, -1, 1);
+    muelle(l, "z", cerca * MUELLE.adelanto, paso);
+    muelle(l, "ry", ox * cerca * MUELLE.giro, paso);  // gira la cara hacia el cursor (izquierda/derecha)
+    muelle(l, "rx", oy * cerca * MUELLE.giro, paso);  // y la inclina hacia arriba o abajo
+    l.letra.position.z = l.base + l.z;
+    l.letra.rotation.set(l.rx, l.ry, 0);
+
+    if (l.lado === "feliz") _base.copy(COLOR_LETRA.feliz);
+    else _base.lerpColors(COLOR_LETRA.apagada, COLOR_LETRA.feliz, calidez);
+    // la luz solo entibia la letra: un toque dorado, sin volverla de metal
+    l.material.color.lerpColors(_base, COLOR_LETRA.dorada, l.influencia * 0.55);
+    l.material.metalness = l.influencia * 0.25;
+    l.material.roughness = lerp(l.lado === "feliz" ? 0.28 : 0.6 - calidez * 0.32, 0.22, l.influencia);
+    l.material.emissive.copy(COLOR_LETRA.dorada).multiplyScalar(l.influencia * 0.18);
+  });
+}
+
+// Estrella de donar: oro pulido que refleja el entorno
+const estrellaDonar = (() => {
+  const forma = new THREE.Shape();
+  for (let i = 0; i < 28; i++) {
+    const r = i % 2 ? 0.66 : 0.82;
+    const a = (i * Math.PI) / 14 - Math.PI / 2;
+    i ? forma.lineTo(Math.cos(a) * r, Math.sin(a) * r) : forma.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const material = new THREE.MeshPhysicalMaterial({ color: "#ffcf5a", metalness: 1, roughness: 0.22, clearcoat: 0.6, envMapIntensity: 1.1, emissive: "#ffb43a", emissiveIntensity: 0.12 });
+  const m = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: 0.16, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.06, bevelSegments: 4 }), material);
+  m.position.copy(enPantalla(636, 503, 1));
+  m.position.z -= 0.1;
+  m.castShadow = true;
+  escena.add(m);
+  return { malla: m, material, escala: 1 };
+})();
+
+/* ---------- 10. Santa Claus en su trineo ---------- */
+
+// Reno simpático, en postura de vuelo: cabeza grande, ojos con brillo, nariz negra, sonrisa,
+// astas ramificadas, gorro con pompón, bufanda de cuadros, lunares y pezuñas con puño de lana.
+const texturaCuadros = lienzoTextura(64, 64, (ctx, w) => {
+  ctx.fillStyle = "#e8562a";
+  ctx.fillRect(0, 0, w, w);
+  ctx.fillStyle = "rgba(255, 196, 80, 0.75)";
+  for (let k = 0; k < w; k += 16) { ctx.fillRect(k, 0, 6, w); ctx.fillRect(0, k, w, 6); }
+  ctx.fillStyle = "rgba(160, 30, 20, 0.45)";
+  for (let k = 8; k < w; k += 16) { ctx.fillRect(k, 0, 3, w); ctx.fillRect(0, k, w, 3); }
+});
+texturaCuadros.wrapS = texturaCuadros.wrapT = THREE.RepeatWrapping;
+texturaCuadros.repeat.set(3, 1);
+
+function crearReno() {
+  const r = new THREE.Group();
+  const pelaje = arcilla("#c9773a");
+  const claro = arcilla("#f1d2a4");
+  const asta = arcilla("#c9a77a", { roughness: 0.7 });
+  const negro = arcilla("#1b1412", { roughness: 0.3, clearcoat: 0.6 });
+  const blanco = arcilla("#fbf3e6");
+  const rojo = arcilla("#d83a24");
+  // cuerpo, barriga y lunares
+  r.add(malla(geoEsfera, pelaje, 0, 0, 0, 0.26, 0.15, 0.15));
+  r.add(malla(geoEsfera, claro, 0.02, -0.05, 0, 0.2, 0.1, 0.13));
+  for (const [x, y, z] of [[-0.08, 0.11, 0.08], [0.04, 0.12, 0.09], [-0.15, 0.07, 0.11], [0.1, 0.08, 0.12], [-0.02, 0.1, -0.1]]) r.add(malla(geoEsferaBaja, blanco, x, y, z, 0.018, 0.012, 0.012));
+  // patas en vuelo (dobladas) con puño de lana y pezuña
+  for (const [x, z, d] of [[-0.15, 0.07, 1], [-0.15, -0.07, 1], [0.15, 0.07, -1], [0.15, -0.07, -1]]) {
+    const pata = new THREE.Group();
+    pata.position.set(x, -0.08, z);
+    pata.rotation.z = d * 0.9;
+    pata.add(malla(new THREE.CapsuleGeometry(0.035, 0.13, 4, 10), pelaje, 0, -0.1, 0));
+    pata.add(malla(new THREE.TorusGeometry(0.038, 0.018, 8, 16), claro, 0, -0.19, 0).rotateX(Math.PI / 2));
+    pata.add(malla(geoEsfera, negro, 0, -0.225, 0, 0.038, 0.028, 0.038));
+    r.add(pata);
+  }
+  // cola
+  r.add(malla(geoEsfera, pelaje, -0.27, 0.06, 0, 0.06, 0.04, 0.05).rotateZ(0.6));
+  r.add(malla(geoEsfera, claro, -0.31, 0.09, 0, 0.03));
+  // cuello y bufanda de cuadros con su caída
+  r.add(malla(new THREE.CapsuleGeometry(0.06, 0.12, 4, 10), pelaje, 0.2, 0.12, 0).rotateZ(-0.7));
+  const bufanda = arcilla("#ffffff", { map: texturaCuadros, roughness: 0.9, sheen: 0.8 });
+  r.add(malla(new THREE.TorusGeometry(0.07, 0.03, 10, 20), bufanda, 0.22, 0.13, 0).rotateY(Math.PI / 2).rotateX(0.5));
+  r.add(malla(new RoundedBoxGeometry(0.05, 0.15, 0.025, 2, 0.01), bufanda, 0.24, 0.06, 0.07).rotateZ(0.3));
+  // cabeza grande
+  const cabeza = new THREE.Group();
+  cabeza.position.set(0.32, 0.27, 0);
+  r.add(cabeza);
+  cabeza.add(malla(geoEsfera, pelaje, 0, 0, 0, 0.13, 0.12, 0.12));
+  cabeza.add(malla(geoEsfera, claro, 0.06, -0.035, 0, 0.09, 0.07, 0.09)); // hocico
+  cabeza.add(malla(geoEsfera, negro, 0.145, -0.01, 0, 0.032, 0.026, 0.03)); // nariz
+  cabeza.add(malla(new THREE.TorusGeometry(0.03, 0.006, 6, 14, Math.PI), negro, 0.12, -0.065, 0).rotateY(Math.PI / 2).rotateZ(Math.PI)); // sonrisa
+  for (const z of [-0.06, 0.06]) {
+    // ojos grandes con brillo y mejillas sonrosadas
+    cabeza.add(malla(geoEsfera, blanco, 0.085, 0.035, z, 0.035, 0.04, 0.03));
+    cabeza.add(malla(geoEsfera, arcilla("#3a1e12", { roughness: 0.15, clearcoat: 1 }), 0.105, 0.035, z, 0.024));
+    cabeza.add(malla(geoEsferaBaja, mat("#ffffff", { emissive: "#ffffff", emissiveIntensity: 0.6 }), 0.125, 0.045, z * 0.92, 0.007));
+    cabeza.add(malla(geoEsfera, arcilla("#f08a8a", { transparent: true, opacity: 0.75 }), 0.07, -0.03, z * 1.55, 0.03, 0.02, 0.012));
+    // orejas
+    const oreja = malla(geoEsfera, pelaje, -0.02, 0.06, z * 2.1, 0.05, 0.022, 0.03);
+    oreja.rotation.set(z > 0 ? 0.6 : -0.6, 0, 0.3);
+    cabeza.add(oreja);
+    // astas ramificadas
+    const s2 = z > 0 ? 1 : -1;
+    const base = new THREE.Group();
+    base.position.set(-0.02, 0.1, z * 0.9);
+    base.rotation.set(s2 * 0.35, 0, 0.25);
+    base.add(malla(new THREE.CapsuleGeometry(0.014, 0.16, 4, 8), asta, 0, 0.09, 0));
+    for (const [y, a] of [[0.07, 0.9], [0.13, -0.8]]) {
+      const rama = malla(new THREE.CapsuleGeometry(0.011, 0.07, 4, 8), asta, Math.sin(a) * 0.035, y + 0.03, 0);
+      rama.rotation.z = -a;
+      base.add(rama);
+    }
+    cabeza.add(base);
+  }
+  // gorro con ribete y pompón
+  const gorro = new THREE.Group();
+  gorro.position.set(-0.01, 0.09, 0);
+  gorro.rotation.z = 0.25;
+  gorro.add(malla(new THREE.SphereGeometry(0.105, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), rojo, 0, 0, 0, 1, 1.05, 1));
+  gorro.add(malla(new THREE.TorusGeometry(0.1, 0.026, 10, 22), blanco, 0, 0.005, 0).rotateX(Math.PI / 2));
+  gorro.add(malla(geoEsfera, blanco, -0.01, 0.115, 0, 0.035));
+  cabeza.add(gorro);
+  return r;
+}
+
+let santa_brazo = null;
+const santa = (() => {
+  const g = new THREE.Group();
+  const rojo = arcilla("#d61f26");
+  const blanco = arcilla("#fbfaf7", { roughness: 0.75, sheen: 0.8 });
+  const piel = arcilla("#f6c9a8");
+  const negro = arcilla("#1c1a1c", { roughness: 0.35, clearcoat: 0.5 });
+  const oro = arcilla("#f2b928", { roughness: 0.35, metalness: 0.3 });
+  const amarillo = arcilla("#f6c431");
+  const marron = arcilla("#6e3f2a");
+  const madera = new THREE.MeshPhysicalMaterial({ color: "#9b1420", roughness: 0.35, clearcoat: 1, envMapIntensity: 0.8 });
+  // trineo lacado con filo dorado y patines curvos
+  g.add(malla(new RoundedBoxGeometry(0.92, 0.3, 0.5, 3, 0.06), madera, 0, 0.22, 0));
+  g.add(malla(new RoundedBoxGeometry(0.2, 0.36, 0.5, 3, 0.06), madera, -0.37, 0.44, 0));
+  g.add(malla(new RoundedBoxGeometry(0.96, 0.04, 0.52, 2, 0.015), oro, 0, 0.385, 0));
+  for (const z of [-0.21, 0.21]) {
+    g.add(malla(new RoundedBoxGeometry(1.04, 0.035, 0.04, 2, 0.012), oro, 0, 0.02, z));
+    const curva = malla(new THREE.TorusGeometry(0.13, 0.02, 8, 16, Math.PI), oro, 0.52, 0.15, z);
+    curva.rotation.z = -Math.PI / 2;
+    g.add(curva);
+    g.add(malla(new THREE.CylinderGeometry(0.014, 0.014, 0.2, 8), oro, 0.25, 0.1, z), malla(new THREE.CylinderGeometry(0.014, 0.014, 0.2, 8), oro, -0.25, 0.1, z));
+  }
+  // saco rojo lleno de regalos
+  g.add(malla(geoEsfera, rojo, -0.3, 0.58, 0, 0.2, 0.23, 0.19));
+  g.add(malla(new THREE.TorusGeometry(0.07, 0.025, 8, 16), rojo, -0.3, 0.8, 0).rotateX(Math.PI / 2));
+  [[-0.36, 0.86, 0.04, 0.12, 3], [-0.24, 0.88, -0.04, 0.11, 1], [-0.31, 0.92, -0.02, 0.09, 5]].forEach(([x, y, z, t, k]) => {
+    const r = crearRegalo(k);
+    r.scale.setScalar(t);
+    r.position.set(x, y, z);
+    r.rotation.set(azar(-0.3, 0.3), azar(0, 1), azar(-0.3, 0.3));
+    g.add(r);
+  });
+  // Santa: barriga redonda, ribetes blancos, cinturón con hebilla dorada
+  const santaG = new THREE.Group();
+  santaG.position.set(0.08, 0.36, 0);
+  g.add(santaG);
+  santaG.add(malla(geoEsfera, rojo, 0, 0.22, 0, 0.21, 0.24, 0.2));
+  santaG.add(malla(new RoundedBoxGeometry(0.05, 0.36, 0.02, 2, 0.01), blanco, 0.0, 0.22, 0.198));
+  santaG.add(malla(new THREE.TorusGeometry(0.205, 0.035, 10, 28), negro, 0, 0.16, 0).rotateX(Math.PI / 2));
+  santaG.add(malla(new RoundedBoxGeometry(0.09, 0.08, 0.03, 2, 0.01), oro, 0, 0.16, 0.215));
+  santaG.add(malla(new RoundedBoxGeometry(0.05, 0.04, 0.035, 2, 0.008), negro, 0, 0.16, 0.218));
+  santaG.add(malla(new THREE.TorusGeometry(0.16, 0.04, 10, 24), blanco, 0, 0.42, 0).rotateX(Math.PI / 2));
+  // piernas sentado y botas negras con hebilla
+  for (const z of [-0.08, 0.08]) {
+    santaG.add(malla(new THREE.CapsuleGeometry(0.055, 0.14, 4, 10), rojo, 0.14, 0.04, z).rotateZ(Math.PI / 2));
+    santaG.add(malla(new THREE.TorusGeometry(0.05, 0.02, 8, 16), blanco, 0.25, 0.04, z).rotateY(Math.PI / 2));
+    santaG.add(malla(new RoundedBoxGeometry(0.1, 0.09, 0.08, 2, 0.03), negro, 0.3, 0.02, z));
+    santaG.add(malla(new RoundedBoxGeometry(0.02, 0.04, 0.05, 1, 0.005), oro, 0.35, 0.03, z));
+  }
+  // cabeza: cara, nariz sonrosada, ojos con brillo, barba y bigote, gorro con pompón
+  const cabeza = new THREE.Group();
+  cabeza.position.set(0.02, 0.56, 0);
+  santaG.add(cabeza);
+  cabeza.add(malla(geoEsfera, piel, 0, 0, 0, 0.12));
+  cabeza.add(malla(geoEsfera, blanco, 0.03, -0.075, 0, 0.12, 0.11, 0.12)); // barba
+  for (const z of [-0.035, 0.035]) {
+    cabeza.add(malla(geoEsfera, blanco, 0.105, -0.025, z * 1.3, 0.04, 0.025, 0.04)); // bigote
+    cabeza.add(malla(geoEsfera, negro, 0.105, 0.03, z, 0.016, 0.02, 0.014));
+    cabeza.add(malla(geoEsferaBaja, mat("#ffffff", { emissive: "#ffffff", emissiveIntensity: 0.6 }), 0.118, 0.036, z * 0.9, 0.005));
+    cabeza.add(malla(geoEsfera, blanco, 0.09, 0.065, z * 1.3, 0.02, 0.008, 0.025)); // cejas
+    cabeza.add(malla(geoEsfera, arcilla("#f08a8a", { transparent: true, opacity: 0.7 }), 0.09, 0.0, z * 2.2, 0.022, 0.016, 0.012));
+  }
+  cabeza.add(malla(geoEsfera, arcilla("#f09a86"), 0.12, 0.005, 0, 0.026)); // nariz
+  cabeza.add(malla(geoEsfera, arcilla("#b8323a"), 0.11, -0.05, 0, 0.018, 0.012, 0.028)); // boca
+  const gorro = new THREE.Group();
+  gorro.position.set(-0.01, 0.06, 0);
+  gorro.add(malla(new THREE.ConeGeometry(0.115, 0.2, 18), rojo, -0.04, 0.1, 0).rotateZ(0.7));
+  gorro.add(malla(new THREE.TorusGeometry(0.11, 0.035, 10, 24), blanco, 0, 0.01, 0).rotateX(Math.PI / 2));
+  gorro.add(malla(geoEsfera, blanco, -0.14, 0.14, 0, 0.04));
+  cabeza.add(gorro);
+  // brazo saludando con manopla amarilla y el otro sujetando las riendas
+  const brazo = new THREE.Group();
+  brazo.position.set(0.05, 0.36, 0.17);
+  brazo.rotation.set(0.3, 0, -2.2);
+  brazo.add(malla(new THREE.CapsuleGeometry(0.045, 0.16, 4, 10), rojo, 0, 0.1, 0));
+  brazo.add(malla(new THREE.TorusGeometry(0.045, 0.018, 8, 16), blanco, 0, 0.19, 0).rotateX(Math.PI / 2));
+  brazo.add(malla(geoEsfera, amarillo, 0, 0.25, 0, 0.05, 0.06, 0.04));
+  brazo.add(malla(geoEsfera, amarillo, 0.03, 0.23, 0.02, 0.02, 0.03, 0.02));
+  santaG.add(brazo);
+  santa_brazo = brazo;
+  const brazo2 = new THREE.Group();
+  brazo2.position.set(0.08, 0.32, -0.17);
+  brazo2.rotation.set(0, 0, -1.2);
+  brazo2.add(malla(new THREE.CapsuleGeometry(0.045, 0.16, 4, 10), rojo, 0, 0.1, 0));
+  brazo2.add(malla(geoEsfera, amarillo, 0, 0.21, 0, 0.05));
+  santaG.add(brazo2);
+  // renos
+  for (const [x, y] of [[1.05, 0.3], [1.72, 0.38]]) {
+    const r = crearReno();
+    r.position.set(x, y, 0);
+    r.scale.setScalar(1.15);
+    g.add(r);
+  }
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0.3, 0.68, -0.1), new THREE.Vector3(1.0, 0.42, 0), new THREE.Vector3(1.6, 0.5, 0)]), new THREE.LineBasicMaterial({ color: "#6e3f2a" })));
+  // estela de polvo dorado
+  const estela = [];
+  for (let i = 0; i < 18; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaDestello, color: "#ffd27a", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    sp.scale.setScalar(azar(0.06, 0.14));
+    estela.push(sp);
+    escena.add(sp);
+  }
+  sombras(g);
+  g.visible = false;
+  escena.add(g);
+  void marron;
+  return { grupo: g, estela, ultimaSuelta: -Infinity };
+})();
+
+const SANTA = { periodo: 15, vuelo: 8, z: 0.3, saco: -0.3, cada: 0.85 };
+
+function moverSanta(segundos) {
+  const fase = segundos % SANTA.periodo;
+  const k = (D - SANTA.z) / D;
+  if (fase > SANTA.vuelo || movimientoReducido) {
+    santa.grupo.visible = false;
+    santa.estela.forEach((s) => { s.visible = false; });
+    santa.ultimaSuelta = -Infinity;
+    return;
+  }
+  santa.grupo.visible = true;
+  const x = lerp(-6 * k, 6.2 * k, fase / SANTA.vuelo);
+  const y = 0.25 + Math.sin(segundos * 3) * 0.1;
+  santa.grupo.position.set(x, y, SANTA.z);
+  santa.grupo.rotation.z = Math.cos(segundos * 3) * 0.04;
+  santa.grupo.rotation.y = Math.sin(segundos * 1.5) * 0.1 - 0.15;
+  if (santa_brazo) santa_brazo.rotation.x = 0.3 + Math.sin(segundos * 7) * 0.35; // saluda
+  santa.estela.forEach((s, i) => {
+    s.visible = true;
+    s.position.set(x - 0.5 - i * 0.12, y + 0.2 + Math.sin(segundos * 6 + i) * 0.06, SANTA.z);
+    s.material.opacity = (1 - i / santa.estela.length) * (0.6 + Math.random() * 0.4);
+  });
+  const saco = x + SANTA.saco;
+  if (saco - santa.ultimaSuelta < SANTA.cada) return;
+  santa.ultimaSuelta = saco;
+  const pantalla = aPixeles(new THREE.Vector3(saco, y, SANTA.z));
+  if (pantalla.x < 12 || pantalla.x > CARTEL.ancho - 12) return;
+  const lado = pantalla.x < MITAD ? lados.feliz : lados.triste;
+  if (lado === lados.triste && !estrellaEncendida) return;
+  soltarRegalo(lado, { x: saco, y: y + 0.35, vx: 2.5 });
+}
+
+/* ---------- 11. Física: regalos que caen, se apilan, se congelan y estallan ---------- */
+
+const fisica = new CANNON.World({ gravity: new CANNON.Vec3(0, -13, 0) });
+fisica.broadphase = new CANNON.SAPBroadphase(fisica);
+fisica.allowSleep = true;
+fisica.defaultContactMaterial.friction = 0.45;
+fisica.defaultContactMaterial.restitution = 0.22;
+
+// Suelo y paredes invisibles que mantienen los regalos en primer plano y cada uno en su lado
+const ZFRENTE = { atras: 1.05, delante: 1.75 };
+function cuerpoPlano(normal, punto) {
+  const b = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+  b.quaternion.setFromVectors(new CANNON.Vec3(0, 0, 1), new CANNON.Vec3(...normal));
+  b.position.set(...punto);
+  fisica.addBody(b);
+  return b;
+}
+cuerpoPlano([0, 1, 0], [0, SUELO, 0]);
+cuerpoPlano([0, 0, 1], [0, 0, ZFRENTE.atras]);
+cuerpoPlano([0, 0, -1], [0, 0, ZFRENTE.delante]);
+cuerpoPlano([1, 0, 0], [-3.85, 0, 0]);
+cuerpoPlano([-1, 0, 0], [3.85, 0, 0]);
+const muro = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.01, 4, 2)) });
+muro.position.set(0, SUELO + 4, 1.4);
+fisica.addBody(muro);
+
+const CAIDA = { maxApilados: { feliz: 16, triste: 22 }, cadaFeliz: [3.5, 6], cadaDonando: 0.24, tamano: [0.24, 0.38] };
+const materialHielo = new THREE.MeshPhysicalMaterial({ color: "#d8efff", roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.8, envMapIntensity: 1.1, emissive: "#2d4f7a", emissiveIntensity: 0.08 });
+
+function crearLado(nombre) { return { nombre, regalos: [], proximo: 0, congelado: false }; }
 const lados = { feliz: crearLado("feliz"), triste: crearLado("triste") };
+const regalosClicables = [];
 
-// Altura de la superficie (pila de regalos o nieve) bajo un tramo [x, x + ancho]
-function superficie(lado, x, ancho) {
-  let maxima = lado.nieve;
-  const desde = Math.max(0, Math.floor(x / CAIDA.celda));
-  const hasta = Math.min(lado.alturas.length - 1, Math.floor((x + ancho) / CAIDA.celda));
-  for (let i = desde; i <= hasta; i++) maxima = Math.max(maxima, lado.alturas[i]);
-  return maxima;
-}
-
-// Un cubo de seis caras; el CSS las coloca en 3D
-function crearCubo(regalo) {
-  const cubo = document.createElement("div");
-  cubo.className = "regalo3d__cubo";
-  for (let i = 0; i < 6; i++) {
-    const cara = document.createElement("div");
-    cara.className = "regalo3d__cara";
-    cubo.appendChild(cara);
-  }
-  regalo.appendChild(cubo);
-}
-
-// Reserva el hueco de un regalo en el mapa de alturas y devuelve dónde se posará.
-// Se hace al soltarlo: así dos regalos en el aire no eligen el mismo hueco.
-function reservarHueco(lado, x, t) {
-  const altura = superficie(lado, x, t);
-  const desde = Math.max(0, Math.floor(x / CAIDA.celda));
-  const hasta = Math.min(lado.alturas.length - 1, Math.floor((x + t) / CAIDA.celda));
-  for (let i = desde; i <= hasta; i++) lado.alturas[i] = altura + t * 0.8;
-  return CAIDA.suelo - altura - t;
-}
-
-function soltarRegalo(lado) {
-  const t = Math.round(azar(...CAIDA.tamano));
-  // De seis sitios al azar se elige el más bajo: la pila crece pareja
-  let x = 0;
-  let mejor = Infinity;
-  for (let intento = 0; intento < 6; intento++) {
-    const candidato = azar(4, MITAD - t - 4);
-    const altura = superficie(lado, candidato, t);
-    if (altura < mejor) { mejor = altura; x = candidato; }
-  }
-  if (mejor > CAIDA.alturaMaxima[lado.nombre]) return;
-
-  const [color, cinta] = COLORES_REGALO[Math.floor(Math.random() * COLORES_REGALO.length)];
-  const elemento = document.createElement("div");
-  elemento.className = "regalo3d";
-  elemento.style.cssText = `--t:${t}px; --color:${color}; --cinta:${cinta}; --giro:${azar(5, 9).toFixed(1)}s; --posado:${azar(15, 70).toFixed(0)}deg`;
-  crearCubo(elemento);
-  lado.capa.appendChild(elemento);
-
-  const regalo = {
-    elemento, x, y: -t - 20, t, color, cinta,
-    destino: reservarHueco(lado, x, t),
-    velocidad: azar(...CAIDA.velocidad),
-  };
-  lado.cayendo.push(regalo);
-
-  // Interacción · click: el regalo estalla en confeti y fuegos artificiales
-  elemento.addEventListener("click", () => estallarRegalo(lado, regalo));
-}
-
-function moverRegalos(lado, dt) {
-  lado.cayendo = lado.cayendo.filter((regalo) => {
-    regalo.y += regalo.velocidad * dt;
-    const aterriza = regalo.y >= regalo.destino;
-    if (aterriza) {
-      regalo.y = regalo.destino;
-      regalo.elemento.classList.add("aterrizado");
-      lado.posados.push(regalo);
-    }
-    regalo.elemento.style.transform = `translate3d(${regalo.x.toFixed(1)}px, ${regalo.y.toFixed(1)}px, 0)`;
-    return !aterriza;
+function soltarRegalo(lado, opciones = {}) {
+  if (lado.regalos.length >= CAIDA.maxApilados[lado.nombre]) return;
+  const t = azar(...CAIDA.tamano);
+  const signo = lado.nombre === "feliz" ? -1 : 1;
+  const x = opciones.x !== undefined ? limitar(opciones.x, signo < 0 ? -3.6 : 0.15, signo < 0 ? -0.15 : 3.6) : signo * azar(0.3, 3.5);
+  const grupo = crearRegalo();
+  grupo.scale.set(t, t * azar(0.8, 1.1), t * azar(0.85, 1.15));
+  escena.add(grupo);
+  const cuerpo = new CANNON.Body({
+    mass: 1 + t * 3,
+    shape: new CANNON.Box(new CANNON.Vec3(grupo.scale.x / 2, grupo.scale.y / 2, grupo.scale.z / 2)),
+    position: new CANNON.Vec3(x, opciones.y ?? 6.5, azar(ZFRENTE.atras + t, ZFRENTE.delante - t)),
+    angularDamping: 0.2,
+    linearDamping: 0.05,
+    sleepSpeedLimit: 0.15,
   });
+  cuerpo.quaternion.setFromEuler(azar(0, 6), azar(0, 6), azar(0, 6));
+  cuerpo.angularVelocity.set(azar(-4, 4), azar(-4, 4), azar(-4, 4));
+  if (opciones.vx) cuerpo.velocity.x = opciones.vx;
+  fisica.addBody(cuerpo);
+  const regalo = { grupo, cuerpo, lado, materiales: grupo.userData.materiales };
+  grupo.userData.regalo = regalo;
+  lado.regalos.push(regalo);
+  regalosClicables.push(grupo);
 }
 
-// Tras quitar un regalo se rehace la pila de abajo arriba: los que se quedan
-// sin apoyo vuelven a caer hasta su nuevo hueco.
-function reconstruirPila(lado) {
-  lado.alturas.fill(0);
-  const deAbajoArriba = (a, b) => b.y - a.y;
-  const posados = [...lado.posados].sort(deAbajoArriba);
-  const enElAire = [...lado.cayendo].sort(deAbajoArriba);
-  lado.posados = [];
-
-  posados.forEach((regalo) => {
-    regalo.destino = reservarHueco(lado, regalo.x, regalo.t);
-    if (regalo.destino > regalo.y + 0.5) {
-      regalo.velocidad = 200; // cae por su peso, ya posado: sin girar
-      lado.cayendo.push(regalo);
-    } else {
-      lado.posados.push(regalo);
-    }
-  });
-
-  enElAire.forEach((regalo) => {
-    regalo.destino = reservarHueco(lado, regalo.x, regalo.t);
-  });
-}
-
-function estallarRegalo(lado, regalo) {
-  if (lado.congelado) return; // congelado no se puede abrir
-  const desplazamiento = lado.nombre === "triste" ? MITAD : 0;
-  fuegos.estallar(desplazamiento + regalo.x + regalo.t / 2, regalo.y + regalo.t / 2, [regalo.color, regalo.cinta]);
-
-  regalo.elemento.remove();
-  lado.cayendo = lado.cayendo.filter((otro) => otro !== regalo);
-  lado.posados = lado.posados.filter((otro) => otro !== regalo);
-  reconstruirPila(lado);
-}
-
-// Sin donación: los regalos del lado oscuro se quedan helados (también los que
-// estaban cayendo, suspendidos en el aire) y los niños lloran
-function congelarLadoOscuro() {
-  lados.triste.congelado = true;
-  lados.triste.capa.classList.add("congelada");
-  entristecerTodos();
-}
-
-// Al volver a donar, el hielo se derrite y todo sigue
-function descongelarLadoOscuro() {
-  lados.triste.congelado = false;
-  lados.triste.capa.classList.remove("congelada");
-}
-
-// Cada copo que llega al suelo engorda el manto de nieve de su lado
-function acumularNieve(lado) {
-  lado.nieve = Math.min(lado.nieve + CAIDA.nievePorCopo, CAIDA.nieveMaxima);
-  lado.manto.style.height = `${lado.nieve.toFixed(1)}px`;
-}
-
-let ultimoTiempo = null;
-
-// Bucle propio (siempre activo): mueve lo que cae y decide cuándo soltar más
-function animarCaidas(tiempo) {
-  const segundos = tiempo / 1000;
-  const dt = ultimoTiempo === null ? 0 : Math.min(segundos - ultimoTiempo, 0.05);
-  ultimoTiempo = segundos;
-
-  const { feliz, triste } = lados;
-
-  if (segundos >= feliz.proximo && feliz.posados.length + feliz.cayendo.length < CAIDA.maxApilados.feliz) {
-    soltarRegalo(feliz);
-    feliz.proximo = segundos + azar(...CAIDA.cadaFeliz);
-  }
-  if (estrellaEncendida && estadoCaravana === "alli" && segundos >= triste.proximo
-      && triste.posados.length + triste.cayendo.length < CAIDA.maxApilados.triste) {
-    soltarRegalo(triste);
-    triste.proximo = segundos + CAIDA.cadaDonando;
-  }
-
-  moverRegalos(feliz, dt);
-  if (!triste.congelado) moverRegalos(triste, dt);
-  requestAnimationFrame(animarCaidas);
-}
-
-function prepararCaidas() {
-  Object.values(lados).forEach((lado) => {
-    lado.manto.style.height = "0px";
-    lado.capaNieve.addEventListener("animationiteration", () => acumularNieve(lado));
-  });
-  if (!movimientoReducido) requestAnimationFrame(animarCaidas);
-}
-
-/* ---------- 8d. Confeti y fuegos artificiales ---------- */
-
-// Partículas dibujadas en un <canvas> que cubre el cartel (coordenadas 848 × 1200).
-// El bucle solo corre mientras quedan partículas vivas.
-const fuegos = (() => {
-  const canvas = document.getElementById("fuegos");
-  const ctx = canvas.getContext("2d");
-  const densidad = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = CARTEL.ancho * densidad;
-  canvas.height = CARTEL.alto * densidad;
-  ctx.scale(densidad, densidad);
-
-  const PALETA = ["#ffd166", "#ff3b30", "#ffb3d1", "#5aa9ff", "#fff1e6", "#2fbf63", "#c77dff"];
-  const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
-
-  let particulas = [];
-  let fotograma = null;
-  let anterior = 0;
-
-  // Papelitos de colores que salen disparados hacia arriba y caen dando vueltas
-  function confeti(x, y, colores) {
-    for (let i = 0; i < 120; i++) {
-      const angulo = azar(-Math.PI * 0.95, -Math.PI * 0.05);
-      const fuerza = azar(180, 620);
-      particulas.push({
-        tipo: "confeti", x, y,
-        vx: Math.cos(angulo) * fuerza, vy: Math.sin(angulo) * fuerza,
-        giro: azar(0, Math.PI * 2), vgiro: azar(-12, 12),
-        ancho: azar(6, 11), alto: azar(4, 6),
-        color: Math.random() < 0.4 ? elegir(colores) : elegir(PALETA),
-        vida: azar(1.8, 2.8),
-      });
-    }
-  }
-
-  // Cohete que sube dejando estela y explota en una palmera de chispas
-  function cohete(x, y) {
-    particulas.push({
-      tipo: "cohete", x, y,
-      vx: azar(-90, 90), vy: azar(-640, -480),
-      color: elegir(PALETA), vida: azar(0.55, 0.8),
+function sincronizarRegalos() {
+  for (const lado of [lados.feliz, lados.triste]) {
+    lado.regalos.forEach((r) => {
+      r.grupo.position.copy(r.cuerpo.position);
+      r.grupo.quaternion.copy(r.cuerpo.quaternion);
     });
   }
+}
 
-  function palmera(x, y, color, lista) {
-    const cantidad = 90;
+function estallarRegalo(regalo) {
+  if (regalo.lado.congelado) return;
+  particulas.estallar(regalo.grupo.position.clone(), regalo.materiales.map((m) => "#" + m.color.getHexString()));
+  escena.remove(regalo.grupo);
+  fisica.removeBody(regalo.cuerpo);
+  regalosClicables.splice(regalosClicables.indexOf(regalo.grupo), 1);
+  regalo.lado.regalos = regalo.lado.regalos.filter((r) => r !== regalo);
+  // los de alrededor se despiertan y caen al hueco
+  regalo.lado.regalos.forEach((r) => r.cuerpo.wakeUp());
+}
+
+function congelarRegalos(congelar) {
+  lados.triste.congelado = congelar;
+  lados.triste.regalos.forEach((r) => {
+    // Helados siguen cayendo por su peso: dejan de girar, rebotan poco y se quedan en el suelo
+    const b = r.cuerpo;
+    b.angularVelocity.scale(congelar ? 0.15 : 1, b.angularVelocity);
+    b.angularDamping = congelar ? 0.9 : 0.2;
+    b.wakeUp();
+    r.grupo.traverse((h) => {
+      if (!h.isMesh) return;
+      if (congelar) {
+        h.userData.original = h.userData.original || h.material;
+        h.material = materialHielo;
+      } else if (h.userData.original) {
+        h.material = h.userData.original;
+      }
+    });
+  });
+}
+
+/* ---------- 12. Nieve que cae y se acumula ---------- */
+
+const nieve = (() => {
+  const cantidad = esMovil ? 600 : 1100;
+  const posiciones = new Float32Array(cantidad * 3);
+  const velocidades = new Float32Array(cantidad);
+  const colores = new Float32Array(cantidad * 3);
+  for (let i = 0; i < cantidad; i++) {
+    const z = azar(-6, 2);
+    const k = (D - z) / D;
+    posiciones.set([azar(-4.3, 4.3) * k, azar(SUELO, 7), z], i * 3);
+    velocidades[i] = azar(0.35, 0.9);
+    const c = posiciones[i * 3] < 0 ? [1, 1, 1] : [0.62, 0.66, 0.74];
+    colores.set(c, i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(posiciones, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(colores, 3));
+  const puntos = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.075, map: texturaDestello, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
+  escena.add(puntos);
+  const mantos = {};
+  for (const [nombre, x] of [["feliz", -2.7], ["triste", 2.7]]) {
+    const m = nombre === "feliz" ? mat("#ffffff", { ...texturaPBR("snow_02", 5, 4), roughness: 1 }) : matPar("#8a92a2", "#ffffff", { ...texturaPBR("snow_02", 5, 4), roughness: 1 });
+    const manto = malla(geoCaja, m, x, SUELO, 0.4, 5.4, 0.001, 3.2);
+    manto.receiveShadow = true;
+    escena.add(manto);
+    mantos[nombre] = manto;
+  }
+  return { puntos, posiciones, velocidades, cantidad, mantos, acumulado: { feliz: 0, triste: 0 } };
+})();
+
+function moverNieve(dt, tiempo) {
+  const { posiciones, velocidades, cantidad } = nieve;
+  const viento = Math.sin(tiempo * 0.3) * 0.15;
+  for (let i = 0; i < cantidad; i++) {
+    posiciones[i * 3 + 1] -= velocidades[i] * dt;
+    posiciones[i * 3] += (Math.sin(tiempo * 1.3 + i) * 0.12 + viento) * dt;
+    if (posiciones[i * 3 + 1] < SUELO) {
+      const lado = posiciones[i * 3] < 0 ? "feliz" : "triste";
+      nieve.acumulado[lado] = Math.min(nieve.acumulado[lado] + 0.00012, 0.06);
+      posiciones[i * 3 + 1] = 7;
+    }
+  }
+  nieve.puntos.geometry.attributes.position.needsUpdate = true;
+  for (const lado of ["feliz", "triste"]) {
+    const alto = Math.max(0.001, nieve.acumulado[lado]);
+    nieve.mantos[lado].scale.y = alto;
+    nieve.mantos[lado].position.y = SUELO + alto / 2;
+  }
+}
+
+/* ---------- 13. Confeti y fuegos artificiales ---------- */
+
+const particulas = (() => {
+  // Confeti: papelitos de verdad (planos que giran y revolotean al caer)
+  const MAX_CONFETI = 700;
+  const confeti = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.06, 0.035), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.5, metalness: 0.3, envMapIntensity: 1 }), MAX_CONFETI);
+  confeti.count = 0;
+  confeti.frustumCulled = false;
+  escena.add(confeti);
+  const papelitos = [];
+
+  // Chispas de los fuegos: puntos que brillan (bloom)
+  const MAX_CHISPAS = 4000;
+  const posChispas = new Float32Array(MAX_CHISPAS * 3);
+  const colChispas = new Float32Array(MAX_CHISPAS * 3);
+  const geoChispas = new THREE.BufferGeometry();
+  geoChispas.setAttribute("position", new THREE.BufferAttribute(posChispas, 3));
+  geoChispas.setAttribute("color", new THREE.BufferAttribute(colChispas, 3));
+  geoChispas.setDrawRange(0, 0);
+  const puntosChispas = new THREE.Points(geoChispas, new THREE.PointsMaterial({ size: 0.12, map: texturaDestello, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  puntosChispas.frustumCulled = false;
+  escena.add(puntosChispas);
+  let chispas = [];
+  const PALETA = ["#ffd166", "#ff4d4d", "#ff9de2", "#6ab0ff", "#fff1e6", "#5cff8a", "#c77dff"];
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(1, 1, 1), _c = new THREE.Color();
+
+  function palmera(origen, color, lista) {
     const segundo = elegir(PALETA);
-    for (let i = 0; i < cantidad; i++) {
-      const angulo = (Math.PI * 2 * i) / cantidad + azar(-0.05, 0.05);
-      const fuerza = azar(110, 300);
-      lista.push({
-        tipo: "chispa", x, y,
-        vx: Math.cos(angulo) * fuerza, vy: Math.sin(angulo) * fuerza,
-        color: i % 3 === 0 ? segundo : color,
-        radio: azar(1.8, 3.2), vida: azar(1.1, 1.8), max: 1.8,
-      });
+    for (let i = 0; i < 140; i++) {
+      const dir = new THREE.Vector3(azar(-1, 1), azar(-1, 1), azar(-1, 1)).normalize().multiplyScalar(azar(1.6, 3.2));
+      lista.push({ pos: origen.clone(), vel: dir, color: new THREE.Color(i % 3 ? color : segundo).multiplyScalar(3), vida: azar(1.1, 1.9), max: 1.9, gravedad: 1.6, roce: 1.2 });
     }
-    lista.push({ tipo: "destello", x, y, vida: 0.25, max: 0.25 });
-  }
-
-  function actualizar(dt) {
-    const vivas = [];
-    particulas.forEach((p) => {
-      p.vida -= dt;
-      if (p.tipo === "confeti") {
-        p.vy += 520 * dt;
-        p.vx *= 1 - 1.6 * dt;
-        p.vy *= 1 - 1.2 * dt;
-        p.giro += p.vgiro * dt;
-      } else if (p.tipo === "cohete") {
-        p.vy += 380 * dt;
-        vivas.push({ tipo: "chispa", x: p.x, y: p.y, vx: azar(-20, 20), vy: azar(20, 60),
-          color: "#ffd166", radio: 1.3, vida: 0.35, max: 0.35 });
-        if (p.vida <= 0 || p.vy > -40) {
-          palmera(p.x, p.y, p.color, vivas);
-          return;
-        }
-      } else if (p.tipo === "chispa") {
-        p.vy += 140 * dt;
-        p.vx *= 1 - 1.4 * dt;
-        p.vy *= 1 - 1.4 * dt;
-      }
-      p.x += (p.vx || 0) * dt;
-      p.y += (p.vy || 0) * dt;
-      if (p.vida > 0 && p.y < CARTEL.alto + 20) vivas.push(p);
-    });
-    particulas = vivas;
-  }
-
-  function dibujar() {
-    ctx.clearRect(0, 0, CARTEL.ancho, CARTEL.alto);
-    particulas.forEach((p) => {
-      if (p.tipo !== "confeti") return;
-      ctx.save();
-      ctx.globalAlpha = Math.min(1, p.vida / 0.6);
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.giro);
-      ctx.scale(1, Math.cos(p.giro * 1.7)); // da la vuelta como un papelito
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.ancho / 2, -p.alto / 2, p.ancho, p.alto);
-      ctx.restore();
-    });
-    // Las luces se suman entre sí: brillan más donde se cruzan
-    ctx.globalCompositeOperation = "lighter";
-    particulas.forEach((p) => {
-      if (p.tipo === "chispa" || p.tipo === "cohete") {
-        const alfa = p.tipo === "cohete" ? 1 : Math.max(0, p.vida / p.max);
-        ctx.globalAlpha = alfa * (0.75 + Math.random() * 0.25);
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.tipo === "cohete" ? 2.6 : p.radio, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (p.tipo === "destello") {
-        const t = 1 - p.vida / p.max;
-        const radio = 20 + t * 70;
-        const brillo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radio);
-        brillo.addColorStop(0, "rgba(255, 255, 255, 0.9)");
-        brillo.addColorStop(1, "rgba(255, 255, 255, 0)");
-        ctx.globalAlpha = Math.max(0, 1 - t);
-        ctx.fillStyle = brillo;
-        ctx.fillRect(p.x - radio, p.y - radio, radio * 2, radio * 2);
-      }
-    });
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
-  }
-
-  function bucle(tiempo) {
-    const dt = Math.min((tiempo - anterior) / 1000, 0.05);
-    anterior = tiempo;
-    actualizar(dt);
-    dibujar();
-    fotograma = particulas.length > 0 ? requestAnimationFrame(bucle) : null;
   }
 
   return {
-    estallar(x, y, colores) {
-      confeti(x, y, colores);
-      particulas.push({ tipo: "destello", x, y, vida: 0.3, max: 0.3 });
-      const cohetes = movimientoReducido ? 0 : 4;
-      for (let i = 0; i < cohetes; i++) cohete(x, y);
-      if (fotograma === null) {
-        anterior = performance.now();
-        fotograma = requestAnimationFrame(bucle);
+    estallar(origen, colores) {
+      for (let i = 0; i < 160 && papelitos.length < MAX_CONFETI; i++) {
+        papelitos.push({
+          pos: origen.clone(), vel: new THREE.Vector3(azar(-2.6, 2.6), azar(2.5, 7), azar(-1.5, 2.5)),
+          rot: new THREE.Euler(azar(0, 6), azar(0, 6), azar(0, 6)), giro: new THREE.Vector3(azar(-12, 12), azar(-12, 12), azar(-12, 12)),
+          color: new THREE.Color(Math.random() < 0.35 ? elegir(colores) : elegir(PALETA)), vida: azar(3, 4.5),
+        });
       }
+      if (!movimientoReducido) {
+        for (let i = 0; i < 4; i++) chispas.push({ pos: origen.clone(), vel: new THREE.Vector3(azar(-1, 1), azar(5.5, 7.5), azar(-0.5, 0.5)), color: new THREE.Color(elegir(PALETA)), vida: azar(0.55, 0.8), max: 1, cohete: true, gravedad: 4, roce: 0 });
+      }
+    },
+    actualizar(dt) {
+      // confeti: gravedad, rozamiento del aire y aleteo
+      for (let i = papelitos.length - 1; i >= 0; i--) {
+        const p = papelitos[i];
+        p.vida -= dt;
+        p.vel.y -= 7 * dt;
+        p.vel.multiplyScalar(1 - 2.2 * dt);
+        if (p.vel.y < -1.2) p.vel.y = -1.2; // cae despacio como papel
+        p.vel.x += Math.sin(p.vida * 6 + i) * 0.6 * dt;
+        p.pos.addScaledVector(p.vel, dt);
+        p.rot.x += p.giro.x * dt; p.rot.y += p.giro.y * dt; p.rot.z += p.giro.z * dt;
+        if (p.pos.y < SUELO + 0.01) { p.pos.y = SUELO + 0.01; p.vel.set(0, 0, 0); p.giro.multiplyScalar(0); p.rot.x = -Math.PI / 2; }
+        if (p.vida <= 0) papelitos.splice(i, 1);
+      }
+      papelitos.forEach((p, i) => {
+        _q.setFromEuler(_e.copy(p.rot));
+        _m.compose(p.pos, _q, _s);
+        confeti.setMatrixAt(i, _m);
+        confeti.setColorAt(i, _c.copy(p.color));
+      });
+      confeti.count = papelitos.length;
+      confeti.instanceMatrix.needsUpdate = true;
+      if (confeti.instanceColor) confeti.instanceColor.needsUpdate = true;
+
+      // chispas y cohetes
+      const siguientes = [];
+      chispas.forEach((p) => {
+        p.vida -= dt;
+        p.vel.y -= p.gravedad * dt;
+        p.vel.multiplyScalar(1 - p.roce * dt);
+        p.pos.addScaledVector(p.vel, dt);
+        if (p.cohete) {
+          siguientes.push({ pos: p.pos.clone(), vel: new THREE.Vector3(azar(-0.2, 0.2), -0.4, 0), color: new THREE.Color("#ffb347").multiplyScalar(2), vida: 0.35, max: 0.35, gravedad: 0, roce: 0 });
+          if (p.vida <= 0 || p.vel.y < 0.4) { palmera(p.pos, p.color, siguientes); return; }
+        }
+        if (p.vida > 0) siguientes.push(p);
+      });
+      chispas = siguientes.slice(0, MAX_CHISPAS);
+      chispas.forEach((p, i) => {
+        posChispas[i * 3] = p.pos.x; posChispas[i * 3 + 1] = p.pos.y; posChispas[i * 3 + 2] = p.pos.z;
+        const b = Math.max(0, p.vida / p.max) * (0.7 + Math.random() * 0.3);
+        colChispas[i * 3] = p.color.r * b; colChispas[i * 3 + 1] = p.color.g * b; colChispas[i * 3 + 2] = p.color.b * b;
+      });
+      geoChispas.setDrawRange(0, chispas.length);
+      geoChispas.attributes.position.needsUpdate = true;
+      geoChispas.attributes.color.needsUpdate = true;
     },
   };
 })();
 
-/* ---------- 9. Escalado del cartel ---------- */
+/* ---------- 14. Interacción ---------- */
 
-// El cartel siempre mide 848 × 1200. Si la ventana es más pequeña se reduce
-// entero con scale(), sin recolocar ni deformar nada.
+function obtenerPosicionEnCartel(evento) {
+  const marco = cartel.getBoundingClientRect();
+  return { x: ((evento.clientX - marco.left) / marco.width) * CARTEL.ancho, y: ((evento.clientY - marco.top) / marco.height) * CARTEL.alto };
+}
+
+// mousemove: la luz cálida sigue al cursor; los niños reaccionan
+function seguirCursor(evento) {
+  const p = obtenerPosicionEnCartel(evento);
+  raton.x = p.x;
+  raton.y = p.y;
+  raton.dentro = true;
+  luzCursor.objetivo = 1;
+  comprobarNinos(p.x, p.y);
+}
+// mouseleave
+function soltarCursor() {
+  raton.dentro = false;
+  luzCursor.objetivo = 0;
+}
+
+function encima(n, x, y) {
+  const pies = aPixeles(n.raiz.position);
+  const alto = 165 * n.escala * (n.siempreFeliz ? 1 : 0.8);
+  return Math.abs(x - pies.x) < 36 * n.escala && y < pies.y && y > pies.y - alto;
+}
+
+function comprobarNinos(x, y) {
+  if (estadoCaravana === "casa") ninosFelices.forEach((n) => { if (n.salto <= 0 && encima(n, x, y)) n.salto = 1.1; });
+  ninosTristes.forEach((n) => { if (encima(n, x, y)) alegrar(n); });
+}
+
+function alegrar(n) {
+  clearTimeout(n.temporizador);
+  n.muyTriste = false;
+  n.objetivo = 1;
+  n.temporizador = setTimeout(() => entristecer(n), 2600);
+}
+function entristecer(n) {
+  if (estrellaEncendida) return;
+  n.objetivo = 0;
+  if (lados.triste.congelado) n.muyTriste = true;
+}
+
+let esperasCadena = [];
+function levantarEnCadena() {
+  esperasCadena.forEach(clearTimeout);
+  const estrella = enPantalla(636, 503, 0);
+  esperasCadena = [...ninosTristes]
+    .sort((a, b) => a.raiz.position.distanceTo(estrella) - b.raiz.position.distanceTo(estrella))
+    .map((n, i) => setTimeout(() => alegrar(n), 350 + i * 260));
+}
+function entristecerTodos() {
+  esperasCadena.forEach(clearTimeout);
+  esperasCadena = ninosTristes.map((n, i) => setTimeout(() => { clearTimeout(n.temporizador); n.objetivo = 0; n.muyTriste = true; }, i * 140));
+}
+
+const CARAVANA = { viaje: 2.4 };
+let esperaCaravana = null;
+function enviarCaravana() {
+  clearTimeout(esperaCaravana);
+  estadoCaravana = "yendo";
+  esperaCaravana = setTimeout(() => { estadoCaravana = "alli"; levantarEnCadena(); }, movimientoReducido ? 0 : CARAVANA.viaje * 1000);
+}
+function volverCaravana() {
+  clearTimeout(esperaCaravana);
+  estadoCaravana = "volviendo";
+  esperaCaravana = setTimeout(() => { estadoCaravana = "casa"; }, movimientoReducido ? 0 : CARAVANA.viaje * 1000);
+}
+
+// mouseenter en el botón: donar
+function encenderEstrella() {
+  if (estrellaEncendida) return;
+  estrellaEncendida = true;
+  cartel.classList.add("esta-donando");
+  congelarRegalos(false);
+  enviarCaravana();
+}
+// mouseleave del botón: sin donación todo se congela
+function apagarEstrella() {
+  if (!estrellaEncendida) return;
+  estrellaEncendida = false;
+  cartel.classList.remove("esta-donando");
+  congelarRegalos(true);
+  entristecerTodos();
+  volverCaravana();
+}
+
+const rayo = new THREE.Raycaster();
+function pulsarCartel(evento) {
+  if (evento.target.closest && evento.target.closest("#donar")) return;
+  const p = obtenerPosicionEnCartel(evento);
+  rayo.setFromCamera(new THREE.Vector2((p.x / CARTEL.ancho) * 2 - 1, -(p.y / CARTEL.alto) * 2 + 1), camara);
+  const tocado = rayo.intersectObjects(regalosClicables, true)[0];
+  if (!tocado) return;
+  let o = tocado.object;
+  while (o && !o.userData.regalo) o = o.parent;
+  if (o) estallarRegalo(o.userData.regalo);
+}
+
+// Pantallas táctiles
+const TACTIL = { imitacion: 800, luzTrasSoltar: 1800 };
+let ultimoToque = 0, esperaSoltar = null, estrellaYaEncendida = false;
+const vieneDeToque = () => Date.now() - ultimoToque < TACTIL.imitacion;
+const soloRaton = (f) => (e) => { if (!vieneDeToque()) f(e); };
+function puntoDelDedo(e) { const d = e.touches[0] || e.changedTouches[0]; return { clientX: d.clientX, clientY: d.clientY }; }
+function tocarCartel(e) {
+  ultimoToque = Date.now();
+  clearTimeout(esperaSoltar);
+  if (e.target.closest("#donar")) return;
+  if (estrellaEncendida) apagarEstrella();
+  seguirCursor(puntoDelDedo(e));
+}
+function deslizarDedo(e) { ultimoToque = Date.now(); seguirCursor(puntoDelDedo(e)); }
+function levantarDedo() { ultimoToque = Date.now(); clearTimeout(esperaSoltar); esperaSoltar = setTimeout(soltarCursor, TACTIL.luzTrasSoltar); }
+function tocarEstrella() { ultimoToque = Date.now(); estrellaYaEncendida = estrellaEncendida; encenderEstrella(); }
+function pulsarEstrella(e) { if (vieneDeToque() && !estrellaYaEncendida) e.preventDefault(); estrellaYaEncendida = estrellaEncendida; }
+
+/* ---------- 15. Bucle de animación ---------- */
+
+const reloj = new THREE.Clock();
+let cuadro = 0;
+let tiempoTotal = 0;
+const _crema = new THREE.Color("#f3d58e"), _oro = new THREE.Color("#e9b949"); // estrella: oro y oro claro al donar
+
+function animar() {
+  const dt = Math.min(reloj.getDelta(), 0.05);
+  tiempoTotal += dt;
+  const t = tiempoTotal;
+
+  // Luz del cursor
+  luzCursor.x = lerp(luzCursor.x, raton.x, Math.min(1, dt * 10));
+  luzCursor.y = lerp(luzCursor.y, raton.y, Math.min(1, dt * 10));
+  luzCursor.intensidad = lerp(luzCursor.intensidad, luzCursor.objetivo, Math.min(1, dt * 6));
+  luzRaton.position.copy(enPantalla(luzCursor.x, luzCursor.y, 1.6));
+  // sobre el botón de donar la luz del cursor se atenúa: si no, deslumbra en la estrella metálica
+  luzRaton.intensity = luzCursor.intensidad * (luzCursor.x > MITAD ? 30 : 12) * (estrellaEncendida ? 0.15 : 1);
+
+  // Calidez del lado oscuro (amanecer al donar)
+  const objetivoCalidez = estrellaEncendida && estadoCaravana === "alli" ? 1 : estrellaEncendida ? 0.35 : 0;
+  calidez = lerp(calidez, objetivoCalidez, Math.min(1, dt * (objetivoCalidez > calidez ? 0.9 : 1.6)));
+  aplicarCalidez();
+  cieloTristeCalido.material.opacity = calidez;
+  luzDonacion.intensity = calidez * 34;
+  luzFria.intensity = 5 * (1 - calidez);
+  arbolSeco.visible = calidez < 0.98;
+  materialesCaja.forEach((m) => { m.opacity = 1 - calidez; });
+  cajaVacia.visible = calidez < 0.98;
+
+  // Humo de las chimeneas (en el lado oscuro aparece al donar)
+  humos.forEach((h) => {
+    const fuerza = h.userData.feliz ? 1 : calidez;
+    h.children.forEach((s) => {
+      const f = (t * 0.25 + s.userData.fase) % 1;
+      s.position.set(Math.sin(f * 5 + s.userData.fase * 9) * 0.06 + f * 0.12, f * 0.8, 0);
+      s.scale.setScalar(0.12 + f * 0.35);
+      s.material.opacity = Math.sin(f * Math.PI) * 0.35 * fuerza;
+    });
+  });
+
+  // Luces del árbol que titilan
+  lucesArbol.forEach((m, i) => { m.emissiveIntensity = 2.2 + Math.sin(t * 2.6 + i * 1.7) * 1.4; });
+  arbolFeliz.userData.estrella.rotation.y = Math.sin(t * 1.1) * 0.35;
+
+  // Caravana
+  const objetivoCaravana = estadoCaravana === "yendo" || estadoCaravana === "alli" ? 1 : 0;
+  const paso = dt / CARAVANA.viaje;
+  progresoCaravana = limitar(progresoCaravana + (objetivoCaravana ? paso : -paso), 0, 1);
+  const avance = suave(progresoCaravana);
+  const corriendo = progresoCaravana > 0 && progresoCaravana < 1;
+  const bote = corriendo ? Math.abs(Math.sin(t * 11)) : 0;
+  arbolFeliz.position.x = lerp(ARBOL_X, -ARBOL_X, avance);
+  arbolFeliz.position.y = SUELO + (corriendo ? 0.25 + bote * 0.08 : 0);
+  arbolFeliz.rotation.z = corriendo ? Math.sin(t * 11) * 0.03 : 0;
+  ninosFelices.forEach((n, i) => {
+    n.raiz.position.x = lerp(n.casa, n.destino, avance);
+    n.raiz.position.y = SUELO + (corriendo ? Math.abs(Math.sin(t * 11 + i)) * 0.12 : 0);
+    n.raiz.rotation.y = corriendo ? (objetivoCaravana ? 0.6 : -0.6) : 0;
+    if (n.salto > 0) n.salto = Math.max(0, n.salto - dt);
+    poseNino(n, t);
+  });
+  ninosTristes.forEach((n) => {
+    n.alegria = lerp(n.alegria, n.objetivo, Math.min(1, dt * 3.2));
+    poseNino(n, t);
+  });
+
+  // Estrella de donar
+  estrellaDonar.escala = lerp(estrellaDonar.escala, estrellaEncendida ? 1.14 : 1, Math.min(1, dt * 8));
+  estrellaDonar.malla.scale.setScalar(estrellaDonar.escala);
+  estrellaDonar.malla.rotation.z += dt * (estrellaEncendida ? 0.6 : 0.15);
+  estrellaDonar.malla.rotation.y = Math.sin(t * 1.3) * 0.25;
+  estrellaDonar.material.color.lerp(estrellaEncendida ? _crema : _oro, Math.min(1, dt * 5));
+  estrellaDonar.material.emissiveIntensity = lerp(estrellaDonar.material.emissiveIntensity, estrellaEncendida ? 0.04 : 0.12, Math.min(1, dt * 5));
+
+  pintarLetras(dt);
+
+  // Santa, regalos (física), nieve y partículas
+  moverSanta(t);
+  if (t >= lados.feliz.proximo) {
+    soltarRegalo(lados.feliz);
+    lados.feliz.proximo = t + azar(...CAIDA.cadaFeliz);
+  }
+  if (estrellaEncendida && estadoCaravana === "alli" && t >= lados.triste.proximo) {
+    soltarRegalo(lados.triste);
+    lados.triste.proximo = t + CAIDA.cadaDonando;
+  }
+  fisica.step(1 / 60, dt, 3);
+  sincronizarRegalos();
+  moverNieve(dt, t);
+  particulas.actualizar(dt);
+
+  renderizador.shadowMap.needsUpdate = (cuadro++ % 2) === 0;
+  compositor.render(dt);
+  requestAnimationFrame(animar);
+}
+
+/* ---------- 16. Escalado e inicio ---------- */
+
+function calcularEscala(anchoVentana, altoVentana) {
+  const margen = anchoVentana < 600 ? 12 : CARTEL.margenVentana;
+  return Math.max(Math.min((anchoVentana - margen) / CARTEL.ancho, (altoVentana - margen) / CARTEL.alto, 1), 0.1);
+}
 function ajustarEscala() {
   const escala = calcularEscala(window.innerWidth, window.innerHeight);
-
   escenario.style.width = `${CARTEL.ancho * escala}px`;
   escenario.style.height = `${CARTEL.alto * escala}px`;
   cartel.style.transform = `scale(${escala})`;
 }
 
-/* ---------- 10. Inicio ---------- */
-
 function iniciarCartel() {
-  const puntosEstrella = crearPuntosEstrella(ESTRELLA.puntas, ESTRELLA.radioExterior, ESTRELLA.radioInterior);
-  poligonoEstrella.setAttribute("points", puntosEstrella);
-  cantoEstrella.setAttribute("points", puntosEstrella);
-
-  // Interacción 3 · mousemove (y vuelta al reposo al salir del cartel)
-  cartel.addEventListener("mousemove", seguirCursor);
-  cartel.addEventListener("mouseleave", soltarCursor);
-
-  // Interacciones 1 y 2 · mouseenter / mouseleave sobre la estrella
-  estrella.addEventListener("mouseenter", encenderEstrella);
-  estrella.addEventListener("mouseleave", apagarEstrella);
-
-  prepararCaidas();
-
+  cartel.addEventListener("mousemove", soloRaton(seguirCursor));
+  cartel.addEventListener("mouseleave", soloRaton(soltarCursor));
+  botonDonar.addEventListener("mouseenter", soloRaton(encenderEstrella));
+  botonDonar.addEventListener("mouseleave", soloRaton(apagarEstrella));
+  cartel.addEventListener("click", pulsarCartel);
+  cartel.addEventListener("touchstart", tocarCartel, { passive: true });
+  cartel.addEventListener("touchmove", deslizarDedo, { passive: true });
+  cartel.addEventListener("touchend", levantarDedo);
+  cartel.addEventListener("touchcancel", levantarDedo);
+  botonDonar.addEventListener("touchstart", tocarEstrella, { passive: true });
+  botonDonar.addEventListener("click", pulsarEstrella);
   window.addEventListener("resize", ajustarEscala);
   ajustarEscala();
-  pintarLuz();
 
-  // Las filas se miden con la fuente definitiva, así que se espera a que cargue.
-  // Si la fuente falla, se mide igualmente con la de reserva.
-  document.fonts.load('900 100px "Anybody"')
-    .catch(() => null)
-    .then(() => document.fonts.ready)
-    .then(prepararTipografia);
+  // unos regalos ya en el suelo para empezar
+  for (let i = 0; i < 6; i++) soltarRegalo(lados.feliz, { y: SUELO + 0.3 + i * 0.45 });
+
+  animar();
+  requestAnimationFrame(() => cartel.classList.add("esta-listo"));
 }
 
 iniciarCartel();

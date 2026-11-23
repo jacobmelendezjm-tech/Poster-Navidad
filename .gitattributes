@@ -1,0 +1,5 @@
+# Archivos binarios: que git no toque los finales de línea
+*.hdr binary
+*.bin binary
+*.jpg binary
+*.png binary
