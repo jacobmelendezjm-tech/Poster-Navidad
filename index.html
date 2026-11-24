@@ -12,7 +12,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;800&display=swap" rel="stylesheet">
 
   <!-- ?v= obliga al navegador a descargar la versión nueva tras cada cambio -->
-  <link rel="stylesheet" href="style.css?v=real-24">
+  <!-- Dentro de la web de pósters (iframe): se marca antes de pintar nada, para que el
+       cartel llene la tarjeta desde el primer instante, sin marco negro alrededor -->
+  <script>try { if (window.self !== window.top) document.documentElement.classList.add("incrustado"); } catch (e) { document.documentElement.classList.add("incrustado"); }</script>
+  <link rel="stylesheet" href="style.css?v=real-57">
 
   <!-- Three.js (escena 3D realista) y cannon-es (física de los regalos) -->
   <script type="importmap">
@@ -24,7 +27,7 @@
       }
     }
   </script>
-  <script type="module" src="main.js?v=real-24"></script>
+  <script type="module" src="main.js?v=real-57"></script>
 </head>
 <body>
 
@@ -89,12 +92,6 @@
         <span>Diseño y desarrollo · <strong>Jacob Meléndez</strong></span>
         <span>DAW 2 · PlanetaFP</span>
       </p>
-
-      <!-- Mientras se carga el 3D (o si el navegador no puede mostrarlo) -->
-      <div class="aviso" id="aviso">
-        <p class="aviso__lema">Ilumina<br>su Navidad.</p>
-        <p class="aviso__texto" id="aviso-texto">Encendiendo la Navidad…</p>
-      </div>
 
     </article>
   </main>

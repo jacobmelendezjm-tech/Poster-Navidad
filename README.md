@@ -108,6 +108,9 @@ HDRI, texturas y modelos de [Poly Haven](https://polyhaven.com) (licencia CC0): 
 `snow_02`, `castle_brick_02_white`, `clay_roof_tiles_02`, `dark_wooden_planks`, `street_lamp_01`, `Lantern_01`,
 `cardboard_box_01`.
 
+Mapa de la superficie de la Luna: NASA Scientific Visualization Studio, *CGI Moon Kit* (datos de LRO / LROC),
+de dominio público (`assets/texturas/luna_nasa_color.jpg`).
+
 La versión anterior en 2D (SVG, sin librerías) está guardada fuera de esta carpeta, en `version-2d/`.
 
 ## La entidad y el branding

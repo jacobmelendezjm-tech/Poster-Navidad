@@ -110,7 +110,6 @@ const escenario = document.getElementById("escenario");
 const cartel = document.getElementById("cartel");
 const lienzo = document.getElementById("mundo");
 const botonDonar = document.getElementById("donar");
-const avisoTexto = document.getElementById("aviso-texto");
 
 const raton = { x: MITAD, y: 600, dentro: false };
 const luzCursor = { x: MITAD, y: 600, intensidad: 0, objetivo: 0 };
@@ -126,7 +125,7 @@ let renderizador;
 try {
   renderizador = new THREE.WebGLRenderer({ canvas: lienzo, antialias: true, powerPreference: "high-performance" });
 } catch (error) {
-  avisoTexto.textContent = "Tu navegador no puede mostrar el cartel en 3D.";
+  document.body.insertAdjacentHTML("beforeend", "<p style=\"position:fixed;inset:auto 0 16px;text-align:center\">Tu navegador no puede mostrar el cartel en 3D.</p>");
   throw error;
 }
 renderizador.setPixelRatio(Math.min(window.devicePixelRatio || 1, esMovil ? 1.25 : 2));
@@ -253,12 +252,10 @@ function cargarImagen(url, intento = 0) {
 // Se descargan todas las texturas fotográficas ANTES de construir la escena:
 // así cada copia (con su propia repetición) nace ya con su imagen.
 const TEXTURAS_PBR = ["snow_02", "castle_brick_02_white", "clay_roof_tiles_02", "dark_wooden_planks"];
+// Se descargan las texturas fotográficas antes de construir la escena (sin pantalla de
+// carga: mientras tanto el cartel simplemente aún no se dibuja).
 async function precargarTexturas() {
   const tareas = [];
-  let hechas = 0;
-  const total = TEXTURAS_PBR.length * 3;
-  const progreso = () => { avisoTexto.textContent = `Encendiendo la Navidad… ${hechas}/${total}`; };
-  progreso();
   for (const nombre of TEXTURAS_PBR) {
     const base = {};
     basesPBR.set(nombre, base);
@@ -270,7 +267,7 @@ async function precargarTexturas() {
         if (color) t.colorSpace = THREE.SRGBColorSpace;
         t.needsUpdate = true;
         base[clave] = t;
-      }).catch(() => { base[clave] = null; }).finally(() => { hechas++; progreso(); }));
+      }).catch(() => { base[clave] = null; }));
     }
   }
   await Promise.all(tareas);
@@ -475,23 +472,22 @@ function texturaCielo(feliz) {
   });
 }
 
-// Luna con cráteres
-function texturaLuna(brillante) {
-  return lienzoTextura(256, 256, (ctx, w) => {
-    const g = ctx.createRadialGradient(w * 0.42, w * 0.4, w * 0.05, w / 2, w / 2, w / 2);
-    g.addColorStop(0, brillante ? "#fffaf0" : "#8a93a6");
-    g.addColorStop(1, brillante ? "#d9d2c0" : "#4d5566");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, w);
-    for (let i = 0; i < 60; i++) {
-      const x = Math.random() * w, y = Math.random() * w, r = azar(3, 22);
-      ctx.fillStyle = `rgba(90, 85, 80, ${azar(0.08, 0.25)})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-}
+
+// Dentro de la web de pósters (iframe) el cartel solo empieza a descargar sus texturas
+// cuando el usuario llega a él: así no compite con los demás pósters al cargar la página.
+const incrustado = (() => { try { return window.self !== window.top; } catch { return true; } })();
+document.documentElement.classList.toggle("incrustado", incrustado);
+let enPantallaAhora = true;
+let alReanudar = null; // se asigna al arrancar el bucle
+await new Promise((listo) => {
+  if (!("IntersectionObserver" in window)) { listo(); return; }
+  let primera = true;
+  new IntersectionObserver((entradas) => {
+    enPantallaAhora = entradas[0].isIntersecting;
+    if (enPantallaAhora && primera) { primera = false; listo(); }
+    if (enPantallaAhora && alReanudar) alReanudar();
+  }, { rootMargin: "300px" }).observe(cartel);
+});
 
 cargarEntorno();
 await precargarTexturas();
@@ -901,31 +897,133 @@ function crearArbolNavidad() {
   return g;
 }
 
-// Árbol seco: tronco y ramas retorcidas, sin hojas
-function crearArbolSeco() {
-  const g = new THREE.Group();
-  const madera = matPar("#8a7f74", "#8a7f74", { ...texturaPBR("dark_wooden_planks", 0.3, 2), opacidadFria: 1, opacidadCalida: 0, roughness: 1, entornoFrio: 0.5 });
-  function rama(longitud, grosor, nivel, padre, angZ, angY) {
-    const pivote = new THREE.Group();
-    pivote.rotation.set(0, angY, angZ);
-    const geo = new THREE.CylinderGeometry(grosor * 0.6, grosor, longitud, 7);
-    geo.translate(0, longitud / 2, 0);
-    pivote.add(new THREE.Mesh(geo, madera));
-    padre.add(pivote);
-    if (nivel > 0) {
-      const hijos = nivel === 3 ? 6 : 3;
-      for (let i = 0; i < hijos; i++) {
-        const sub = new THREE.Group();
-        sub.position.y = longitud * azar(0.45, 0.95);
-        pivote.add(sub);
-        rama(longitud * azar(0.45, 0.65), grosor * 0.55, nivel - 1, sub, azar(0.5, 1.1) * (i % 2 ? 1 : -1), azar(0, Math.PI * 2));
-      }
+// Corteza de madera muerta: vetas largas y retorcidas, gris azulado con cantos más claros
+const texturaCorteza = lienzoTextura(256, 512, (ctx, w, h) => {
+  ctx.fillStyle = "#5a6272";
+  ctx.fillRect(0, 0, w, h);
+  for (let k = 0; k < 260; k++) {
+    let x = azar(0, w);
+    const claro = Math.random() < 0.35;
+    ctx.strokeStyle = claro ? `rgba(200, 208, 220, ${azar(0.15, 0.45)})` : `rgba(18, 22, 30, ${azar(0.3, 0.7)})`;
+    ctx.lineWidth = claro ? azar(0.8, 2.2) : azar(1.5, 4.5);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    for (let y = 0; y <= h; y += 16) {
+      x += Math.sin(y * 0.02 + k) * 1.6 + azar(-1.2, 1.2);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+});
+texturaCorteza.wrapS = texturaCorteza.wrapT = THREE.RepeatWrapping;
+
+// Tubo que se afina a lo largo de una curva, con la sección algo irregular (madera nudosa)
+function tuboAfinado(curva, r0, r1, segmentos = 24, lados = 9, giro = 0) {
+  const marcos = curva.computeFrenetFrames(segmentos, false);
+  const posiciones = [], uvs = [], indices = [];
+  for (let i = 0; i <= segmentos; i++) {
+    const t = i / segmentos;
+    const centro = curva.getPointAt(t);
+    const r = lerp(r0, r1, Math.pow(t, 0.8)) * (1 + Math.sin(t * 19 + r0 * 40) * 0.06);
+    for (let j = 0; j <= lados; j++) {
+      const a = (j / lados) * Math.PI * 2 + t * giro;
+      const bulto = 1 + Math.sin(a * 3 + t * 7) * 0.1 + Math.sin(a * 5 - t * 11) * 0.05; // vetas en relieve
+      const n = marcos.normals[i].clone().multiplyScalar(Math.cos(a)).add(marcos.binormals[i].clone().multiplyScalar(Math.sin(a)));
+      const v = centro.clone().addScaledVector(n, r * bulto);
+      posiciones.push(v.x, v.y, v.z);
+      uvs.push(j / lados, t * curva.getLength() * 1.2);
     }
   }
-  rama(3.4, 0.14, 3, g, 0, 0);
-  // guirnalda apagada
-  const apagada = matPar("#2c2f36", "#2c2f36", { opacidadFria: 1, opacidadCalida: 0, roughness: 0.4, metalness: 0.4 });
-  for (let i = 0; i < 9; i++) g.add(malla(geoEsferaBaja, apagada, -0.8 + i * 0.2, 1.4 - Math.sin((i / 8) * Math.PI) * 0.35, 0.18, 0.045));
+  for (let i = 0; i < segmentos; i++) {
+    for (let j = 0; j < lados; j++) {
+      const a = i * (lados + 1) + j, b = a + lados + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(posiciones, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Árbol seco: un pino muerto. Tronco recto que se afina hasta la punta, pisos de ramas
+// desnudas que salen en círculo, caen por su peso y se acortan hacia arriba (silueta de
+// abeto), con ramitas secas en las puntas, algunas ramas partidas y raíces en el suelo.
+function crearArbolSeco() {
+  const g = new THREE.Group();
+  const madera = matPar("#e2e7ef", "#e2e7ef", { map: texturaCorteza, opacidadFria: 1, opacidadCalida: 0, roughness: 0.85, entornoFrio: 1.6, emissive: "#2a3448", emisivoFrio: 0.9, emisivoCalido: 0 });
+  const piezas = [];
+  const ALTO = 4.6, BASE = 0.24;
+
+  // tronco: casi recto, con una ligera ondulación
+  const puntosTronco = [];
+  for (let k = 0; k <= 8; k++) {
+    const t = k / 8;
+    puntosTronco.push(new THREE.Vector3(Math.sin(t * 5) * 0.03, t * ALTO, Math.cos(t * 4) * 0.02));
+  }
+  const tronco = new THREE.CatmullRomCurve3(puntosTronco);
+  piezas.push(tuboAfinado(tronco, BASE, 0.012, 40, 10, 2));
+
+  // una rama: sale casi horizontal, se curva hacia abajo y deja ramitas secas
+  function rama(origen, angulo, largo, grosor, caida) {
+    const dir = new THREE.Vector3(Math.cos(angulo), azar(0.05, 0.2), Math.sin(angulo) * 0.75);
+    const pts = [origen.clone()];
+    let p = origen.clone();
+    for (let k = 1; k <= 4; k++) {
+      dir.y -= caida * 0.45;
+      p = p.clone().addScaledVector(dir.clone().normalize(), largo / 4);
+      pts.push(p);
+    }
+    const curva = new THREE.CatmullRomCurve3(pts);
+    piezas.push(tuboAfinado(curva, grosor, 0.006, 10, 6, 0.5));
+    // ramitas secas a lo largo de la rama
+    const ramitas = Math.max(2, Math.round(largo * 5));
+    for (let k = 0; k < ramitas; k++) {
+      const t = azar(0.35, 0.95);
+      const ini = curva.getPointAt(t);
+      const tg = curva.getTangentAt(t);
+      const lado = new THREE.Vector3(-tg.z, 0, tg.x).multiplyScalar(k % 2 ? 1 : -1);
+      const fin = ini.clone().addScaledVector(tg, largo * 0.12).addScaledVector(lado, largo * azar(0.1, 0.2)).add(new THREE.Vector3(0, azar(-0.08, 0.04), 0));
+      piezas.push(tuboAfinado(new THREE.CatmullRomCurve3([ini, ini.clone().lerp(fin, 0.5).add(new THREE.Vector3(0, 0.02, 0)), fin]), grosor * 0.45, 0.003, 4, 4, 0));
+    }
+  }
+
+  // pisos de ramas (verticilos), más cortos cuanto más arriba
+  const pisos = 13;
+  for (let v = 0; v < pisos; v++) {
+    const t = v / pisos;
+    const y = ALTO * (0.2 + t * 0.74);
+    const largo = (1 - t) * 1.65 + 0.18;
+    const cuantas = Math.max(3, Math.round(6 - t * 2));
+    const giro = v * 2.4;
+    for (let b = 0; b < cuantas; b++) {
+      if (Math.random() < 0.15) continue; // huecos: ramas que se cayeron
+      const partida = Math.random() < 0.2; // ramas partidas, más cortas
+      const origen = tronco.getPointAt(y / ALTO);
+      rama(origen, giro + (b / cuantas) * Math.PI * 2 + azar(-0.25, 0.25), largo * (partida ? 0.4 : azar(0.8, 1.1)), BASE * (1 - t) * 0.45 + 0.022, azar(0.25, 0.45) * (1 - t * 0.5));
+    }
+  }
+
+  // raíces que asoman en el suelo
+  for (let r = 0; r < 6; r++) {
+    const a = (r / 6) * Math.PI * 2 + azar(-0.2, 0.2);
+    const largo = azar(0.45, 0.8);
+    const pts = [];
+    for (let k = 0; k <= 3; k++) {
+      const t = k / 3, d = 0.12 + t * largo;
+      pts.push(new THREE.Vector3(Math.cos(a) * d, 0.16 * (1 - t) * (1 - t) - 0.02, Math.sin(a) * d * 0.7));
+    }
+    piezas.push(tuboAfinado(new THREE.CatmullRomCurve3(pts), 0.085, 0.006, 10, 6, 0.5));
+  }
+
+  const geo = mergeGeometries(piezas.map((p) => {
+    const g2 = p.index ? p.toNonIndexed() : p;
+    if (!g2.attributes.uv) g2.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g2.attributes.position.count * 2), 2));
+    return g2;
+  }));
+  g.add(new THREE.Mesh(geo, madera));
   return sombras(g);
 }
 
@@ -1098,18 +1196,59 @@ cieloTristeCalido.position.z += 0.01;
 escena.add(cieloFeliz, cieloTriste, cieloTristeCalido);
 
 // Lunas con cráteres y halo
-function crearLuna(px, brillante) {
+// Luna: esfera 3D con el mapa real de la superficie lunar (NASA, LRO · dominio público),
+// iluminada desde arriba a la izquierda: la cara derecha queda en sombra, como en una foto.
+function crearLuna(px, py) {
   const g = new THREE.Group();
-  g.position.copy(enPantalla(px, 520, -12));
+  g.position.copy(enPantalla(px, py, -12));
   const k = (D + 12) / D;
-  g.add(malla(geoEsfera, new THREE.MeshBasicMaterial({ map: texturaLuna(brillante), fog: false }), 0, 0, 0, 0.24 * k));
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaDestello, color: brillante ? "#fff1c4" : "#7d8799", transparent: true, opacity: brillante ? 0.32 : 0.12, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-  halo.scale.setScalar(1.6 * k);
-  g.add(halo);
+  const radio = 0.6 * k; // unos 120 px de diámetro en el cartel
+  const halo = (escala, color, opacidad) => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaDestello, color, transparent: true, opacity: opacidad, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    sp.scale.setScalar(radio * escala);
+    sp.position.z = -radio * 1.2;
+    return sp;
+  };
+  g.add(halo(4.2, "#ffe9c2", 0.16), halo(2.5, "#fff6e4", 0.28));
+  const mapa = new THREE.Texture();
+  mapa.colorSpace = THREE.SRGBColorSpace;
+  mapa.anisotropy = anisotropia;
+  cargarImagen(`${RUTA}texturas/luna_nasa_color.jpg`).then((imagen) => { mapa.image = imagen; mapa.needsUpdate = true; }).catch(() => {});
+  const material = new THREE.ShaderMaterial({
+    uniforms: { mapa: { value: mapa }, uLuz: { value: new THREE.Vector3(-0.62, 0.42, 0.66).normalize() }, uBrillo: { value: 0.88 } },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform sampler2D mapa;
+      uniform vec3 uLuz;
+      uniform float uBrillo;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      void main() {
+        vec3 color = texture2D(mapa, vUv).rgb;
+        float ndl = dot(normalize(vNormal), uLuz);
+        float luz = smoothstep(-0.25, 0.55, ndl);       // terminador suave
+        float borde = pow(max(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0)), 0.0), 0.35);
+        vec3 sombra = color * 0.07;                     // la cara oscura apenas se intuye
+        gl_FragColor = vec4(mix(sombra, color * uBrillo * (0.75 + 0.25 * borde), luz), 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    fog: false,
+  });
+  const esfera = new THREE.Mesh(new THREE.SphereGeometry(radio, 64, 48), material);
+  esfera.rotation.set(0.1, -Math.PI / 2, 0.3); // la cara visible de la Luna, algo inclinada
+  g.add(esfera);
   return g;
 }
 // Una sola luna, en el cielo de la Navidad feliz
-escena.add(crearLuna(340, true));
+escena.add(crearLuna(300, 545));
 
 // Suelo nevado con dunas suaves (textura fotográfica); el del lado oscuro es gris y se aclara al donar.
 // Es mucho más ancho y profundo de lo que se ve, para que su borde nunca asome en los laterales.
@@ -1382,8 +1521,7 @@ function crearLema(fuente) {
   });
 }
 new FontLoader().load(FUENTE_3D, crearLema, undefined, () => {
-  cartel.classList.remove("esta-listo");
-  avisoTexto.textContent = "";
+  // si la fuente 3D no carga, el lema queda en el título accesible (h1)
 });
 
 const COLOR_LETRA = { feliz: new THREE.Color(C.crema), apagada: new THREE.Color("#5d6370"), dorada: new THREE.Color("#ffcf6b") };
@@ -1637,40 +1775,65 @@ const santa = (() => {
   g.visible = false;
   escena.add(g);
   void marron;
-  return { grupo: g, estela, ultimaSuelta: -Infinity };
+  return { grupo: g, estela, ultimaSuelta: 0 };
 })();
 
-const SANTA = { periodo: 15, vuelo: 8, z: 0.3, saco: -0.3, cada: 0.85 };
+// Santa vuela de ida y vuelta sin parar: cruza por delante, al llegar a un extremo gira
+// en una curva hacia el fondo, vuelve por detrás del árbol y gira otra vez al otro lado.
+// El recorrido es un "estadio" (dos rectas unidas por dos semicírculos) para su centro.
+const SANTA = { z: 0.3, radio: 0.9, velocidad: 1.5, mitad: 3.0, saco: -0.3, centro: 0.8, cada: 0.85 };
+// el dibujo de Santa empieza en el trineo y acaba en los renos: se centra en su origen
+santa.grupo.children.forEach((hijo) => { hijo.position.x -= SANTA.centro; });
 
-function moverSanta(segundos) {
-  const fase = segundos % SANTA.periodo;
+function posicionSanta(recorrido) {
   const k = (D - SANTA.z) / D;
-  if (fase > SANTA.vuelo || movimientoReducido) {
+  const izq = -SANTA.mitad * k, der = SANTA.mitad * k, r = SANTA.radio;
+  const recta = der - izq, curva = Math.PI * r;
+  const s = recorrido % (2 * recta + 2 * curva);
+  const zFrente = SANTA.z;
+  if (s < recta) return { x: izq + s, z: zFrente, rumbo: 0 };
+  if (s < recta + curva) {
+    const th = ((s - recta) / curva) * Math.PI;
+    return { x: der + r * Math.sin(th), z: zFrente - r + r * Math.cos(th), rumbo: th };
+  }
+  if (s < 2 * recta + curva) return { x: der - (s - recta - curva), z: zFrente - 2 * r, rumbo: Math.PI };
+  const th = Math.PI + ((s - 2 * recta - curva) / curva) * Math.PI;
+  return { x: izq + r * Math.sin(th), z: zFrente - r + r * Math.cos(th), rumbo: th };
+}
+
+let recorridoSanta = 0;
+function moverSanta(segundos, dt) {
+  if (movimientoReducido) {
     santa.grupo.visible = false;
-    santa.estela.forEach((s) => { s.visible = false; });
-    santa.ultimaSuelta = -Infinity;
+    santa.estela.forEach((sp) => { sp.visible = false; });
     return;
   }
-  santa.grupo.visible = true;
-  const x = lerp(-6 * k, 6.2 * k, fase / SANTA.vuelo);
+  recorridoSanta += SANTA.velocidad * dt;
+  const { x, z, rumbo } = posicionSanta(recorridoSanta);
+  const dirX = Math.cos(rumbo), dirZ = -Math.sin(rumbo); // hacia dónde mira
   const y = 0.25 + Math.sin(segundos * 3) * 0.1;
-  santa.grupo.position.set(x, y, SANTA.z);
-  santa.grupo.rotation.z = Math.cos(segundos * 3) * 0.04;
-  santa.grupo.rotation.y = Math.sin(segundos * 1.5) * 0.1 - 0.15;
+  santa.grupo.visible = true;
+  santa.grupo.position.set(x, y, z);
+  santa.grupo.rotation.set(0, rumbo, Math.cos(segundos * 3) * 0.04);
+  // se inclina hacia dentro al girar
+  const girando = Math.abs(Math.sin(rumbo)) > 0.01;
+  santa.grupo.rotation.x = girando ? -Math.sin(rumbo) * 0.18 : 0;
   if (santa_brazo) santa_brazo.rotation.x = 0.3 + Math.sin(segundos * 7) * 0.35; // saluda
-  santa.estela.forEach((s, i) => {
-    s.visible = true;
-    s.position.set(x - 0.5 - i * 0.12, y + 0.2 + Math.sin(segundos * 6 + i) * 0.06, SANTA.z);
-    s.material.opacity = (1 - i / santa.estela.length) * (0.6 + Math.random() * 0.4);
+  santa.estela.forEach((sp, i) => {
+    sp.visible = true;
+    const atras = 1.3 + i * 0.12;
+    sp.position.set(x - dirX * atras, y + 0.2 + Math.sin(segundos * 6 + i) * 0.06, z - dirZ * atras);
+    sp.material.opacity = (1 - i / santa.estela.length) * (0.6 + Math.random() * 0.4);
   });
-  const saco = x + SANTA.saco;
-  if (saco - santa.ultimaSuelta < SANTA.cada) return;
-  santa.ultimaSuelta = saco;
-  const pantalla = aPixeles(new THREE.Vector3(saco, y, SANTA.z));
+  // regalos desde el saco, solo en los tramos rectos
+  if (girando || recorridoSanta - santa.ultimaSuelta < SANTA.cada) return;
+  santa.ultimaSuelta = recorridoSanta;
+  const saco = x + dirX * (SANTA.saco - SANTA.centro);
+  const pantalla = aPixeles(new THREE.Vector3(saco, y, z));
   if (pantalla.x < 12 || pantalla.x > CARTEL.ancho - 12) return;
   const lado = pantalla.x < MITAD ? lados.feliz : lados.triste;
   if (lado === lados.triste && !estrellaEncendida) return;
-  soltarRegalo(lado, { x: saco, y: y + 0.35, vx: 2.5 });
+  soltarRegalo(lado, { x: saco, y: y + 0.35, vx: 2.5 * dirX });
 }
 
 /* ---------- 11. Física: regalos que caen, se apilan, se congelan y estallan ---------- */
@@ -2043,10 +2206,24 @@ function pulsarEstrella(e) { if (vieneDeToque() && !estrellaYaEncendida) e.preve
 
 const reloj = new THREE.Clock();
 let cuadro = 0;
+let bucleActivo = false;
+let mediaFotograma = 16;
+let ultimoAjuste = 0;
+
+function reanudar() {
+  if (bucleActivo || !arrancado) return;
+  bucleActivo = true;
+  reloj.getDelta(); // no contar el tiempo que estuvo parado
+  requestAnimationFrame(animar);
+}
+let arrancado = false;
 let tiempoTotal = 0;
 const _crema = new THREE.Color("#f3d58e"), _oro = new THREE.Color("#e9b949"); // estrella: oro y oro claro al donar
 
 function animar() {
+  // fuera de pantalla o con la pestaña oculta no se dibuja nada
+  if (!enPantallaAhora || document.hidden) { bucleActivo = false; return; }
+  const inicio = performance.now();
   const dt = Math.min(reloj.getDelta(), 0.05);
   tiempoTotal += dt;
   const t = tiempoTotal;
@@ -2119,7 +2296,7 @@ function animar() {
   pintarLetras(dt);
 
   // Santa, regalos (física), nieve y partículas
-  moverSanta(t);
+  moverSanta(t, dt);
   if (t >= lados.feliz.proximo) {
     soltarRegalo(lados.feliz);
     lados.feliz.proximo = t + azar(...CAIDA.cadaFeliz);
@@ -2133,22 +2310,53 @@ function animar() {
   moverNieve(dt, t);
   particulas.actualizar(dt);
 
-  renderizador.shadowMap.needsUpdate = (cuadro++ % 2) === 0;
+  // las sombras se recalculan cada 2 fotogramas (cada 3 en la tarjeta pequeña)
+  renderizador.shadowMap.needsUpdate = (cuadro++ % (escalaPantalla < 0.5 ? 3 : 2)) === 0;
   compositor.render(dt);
+
+  // calidad adaptativa: si los fotogramas tardan, menos resolución; si sobra, más
+  mediaFotograma = lerp(mediaFotograma, performance.now() - inicio, 0.1);
+  // (los 4 primeros segundos no cuentan: ahí se compilan sombreadores y llegan texturas)
+  if (tiempoTotal > 4 && tiempoTotal - ultimoAjuste > 1.5) {
+    ultimoAjuste = tiempoTotal;
+    if (mediaFotograma > 24 && calidad > 0.8) { calidad *= 0.9; aplicarResolucion(); }
+    else if (mediaFotograma < 9 && calidad < 1) { calidad = Math.min(1, calidad / 0.85); aplicarResolucion(); }
+  }
   requestAnimationFrame(animar);
 }
 
 /* ---------- 16. Escalado e inicio ---------- */
 
 function calcularEscala(anchoVentana, altoVentana) {
-  const margen = anchoVentana < 600 ? 12 : CARTEL.margenVentana;
-  return Math.max(Math.min((anchoVentana - margen) / CARTEL.ancho, (altoVentana - margen) / CARTEL.alto, 1), 0.1);
+  // en la web de pósters el cartel llena su tarjeta (y crece al ampliarlo)
+  const margen = incrustado ? 0 : anchoVentana < 600 ? 12 : CARTEL.margenVentana;
+  const maximo = incrustado ? 3 : 1;
+  return Math.max(Math.min((anchoVentana - margen) / CARTEL.ancho, (altoVentana - margen) / CARTEL.alto, maximo), 0.1);
 }
+
+// Resolución: se dibujan solo los píxeles que el cartel ocupa de verdad en pantalla
+// (en una tarjeta de 300 px, unas 8 veces menos que a tamaño completo), y si el equipo
+// va justo se baja un poco más sobre la marcha.
+let escalaPantalla = 1;
+let calidad = 1;
+let densidadActual = 0;
+function aplicarResolucion() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const densidad = Math.max(0.25, Math.min(escalaPantalla * Math.max(dpr * calidad, 1), esMovil ? 1.25 : 2));
+  if (Math.abs(densidad - densidadActual) < 0.02) return;
+  densidadActual = densidad;
+  renderizador.setPixelRatio(densidad);
+  compositor.setPixelRatio(densidad);
+  compositor.setSize(CARTEL.ancho, CARTEL.alto);
+}
+
 function ajustarEscala() {
   const escala = calcularEscala(window.innerWidth, window.innerHeight);
   escenario.style.width = `${CARTEL.ancho * escala}px`;
   escenario.style.height = `${CARTEL.alto * escala}px`;
   cartel.style.transform = `scale(${escala})`;
+  escalaPantalla = escala;
+  aplicarResolucion();
 }
 
 function iniciarCartel() {
@@ -2169,8 +2377,10 @@ function iniciarCartel() {
   // unos regalos ya en el suelo para empezar
   for (let i = 0; i < 6; i++) soltarRegalo(lados.feliz, { y: SUELO + 0.3 + i * 0.45 });
 
-  animar();
-  requestAnimationFrame(() => cartel.classList.add("esta-listo"));
+  arrancado = true;
+  alReanudar = reanudar;
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) reanudar(); });
+  reanudar();
 }
 
 iniciarCartel();
