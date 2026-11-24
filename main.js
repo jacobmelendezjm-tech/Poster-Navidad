@@ -204,7 +204,7 @@ const basesPBR = new Map();
 // Texturas fotográficas de Poly Haven (color, relieve y rugosidad), con reintentos:
 // un servidor local sencillo a veces corta descargas cuando llegan muchas a la vez.
 // Cola de descargas: como mucho 3 a la vez (los servidores locales sencillos cortan si llegan más)
-const cola = { activas: 0, max: 3, pendientes: [] };
+const cola = { activas: 0, max: 6, pendientes: [] };
 function encolar(tarea) {
   cola.pendientes.push(tarea);
   siguienteDescarga();
@@ -260,7 +260,7 @@ async function precargarTexturas() {
     const base = {};
     basesPBR.set(nombre, base);
     for (const [clave, sufijo, color] of [["map", "diff", true], ["normalMap", "nor_gl", false], ["roughnessMap", "rough", false]]) {
-      tareas.push(cargarImagen(`${RUTA}texturas/${nombre}_${sufijo}_1k.jpg`).then((imagen) => {
+      tareas.push(cargarImagen(`${RUTA}texturas/${nombre}_${sufijo}_512.jpg`).then((imagen) => {
         const t = new THREE.Texture(imagen);
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
         t.anisotropy = anisotropia;
@@ -1481,6 +1481,13 @@ uniform float uEncendido;`)
 }
 partirPorLado(matLetraCanto, "#1a1d24", encendidoCanto);
 
+// La vista previa se funde cuando el 3D ha dibujado y el lema 3D ya existe (2 de 2)
+let partesListas = 0;
+function marcarListo() {
+  partesListas++;
+  if (partesListas >= 2) cartel.classList.add("esta-listo");
+}
+
 function crearLema(fuente) {
   const kz = (D - LEMA_Z) / D;
   const anchoObjetivo = 7.68 * kz;
@@ -1519,6 +1526,7 @@ function crearLema(fuente) {
       letras.push({ letra, material: letra.material[0], encendido: letra.userData.encendido, lado: centro.x < 0 ? "feliz" : "triste", base: letra.position.z, influencia: 0, centro: aPixeles(centro) });
     });
   });
+  requestAnimationFrame(marcarListo);
 }
 new FontLoader().load(FUENTE_3D, crearLema, undefined, () => {
   // si la fuente 3D no carga, el lema queda en el título accesible (h1)
@@ -2379,6 +2387,9 @@ function iniciarCartel() {
 
   arrancado = true;
   alReanudar = reanudar;
+  // cuando el 3D ya ha dibujado un par de fotogramas, se funde la vista previa
+  requestAnimationFrame(() => requestAnimationFrame(marcarListo));
+  setTimeout(() => cartel.classList.add("esta-listo"), 8000); // por si la fuente 3D no llega
   document.addEventListener("visibilitychange", () => { if (!document.hidden) reanudar(); });
   reanudar();
 }

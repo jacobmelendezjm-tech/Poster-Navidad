@@ -15,7 +15,9 @@
   <!-- Dentro de la web de pósters (iframe): se marca antes de pintar nada, para que el
        cartel llene la tarjeta desde el primer instante, sin marco negro alrededor -->
   <script>try { if (window.self !== window.top) document.documentElement.classList.add("incrustado"); } catch (e) { document.documentElement.classList.add("incrustado"); }</script>
-  <link rel="stylesheet" href="style.css?v=real-57">
+  <!-- Vista previa: se ve al instante mientras se prepara el 3D -->
+  <link rel="preload" as="image" href="assets/vista-previa.jpg">
+  <link rel="stylesheet" href="style.css?v=real-59">
 
   <!-- Three.js (escena 3D realista) y cannon-es (física de los regalos) -->
   <script type="importmap">
@@ -27,7 +29,7 @@
       }
     }
   </script>
-  <script type="module" src="main.js?v=real-57"></script>
+  <script type="module" src="main.js?v=real-59"></script>
 </head>
 <body>
 
@@ -39,6 +41,9 @@
       <canvas class="mundo" id="mundo" width="848" height="1200"
               aria-label="A la izquierda, un pueblo navideño iluminado, un árbol verde lleno de luces y niños felices con regalos. A la derecha, el mismo pueblo a oscuras, un árbol seco y niños tristes sin regalos. Al donar, los niños felices les llevan la Navidad."
               role="img"></canvas>
+
+      <!-- Imagen fija del cartel: aparece al instante y se funde cuando el 3D está listo -->
+      <img class="vista-previa" src="assets/vista-previa.jpg" alt="" aria-hidden="true" width="848" height="1200" decoding="async" fetchpriority="high">
 
       <!-- Para lectores de pantalla (el lema se ve en 3D) -->
       <h1 class="solo-lectores">Ilumina su Navidad. 21 de diciembre.</h1>

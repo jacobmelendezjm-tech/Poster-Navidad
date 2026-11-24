@@ -108,6 +108,21 @@ body {
 }
 
 /* ---------- 4. Lienzo 3D ---------- */
+.vista-previa {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  transition: opacity 0.8s ease, visibility 0.8s;
+}
+
+.cartel.esta-listo .vista-previa {
+  opacity: 0;
+  visibility: hidden;
+}
+
 .mundo {
   position: absolute;
   inset: 0;
