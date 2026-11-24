@@ -261,28 +261,19 @@ const PASOS_TOTALES = 14; // 12 texturas + fuente 3D + primer fotograma
 function avanzarCarga() {
   pasosCarga++;
   if (barraCarga) barraCarga.style.width = `${Math.min(100, 4 + (pasosCarga / PASOS_TOTALES) * 96)}%`;
-  if (pasosCarga >= PASOS_TOTALES) setTimeout(abrirCascanueces, 400);
+  if (pasosCarga >= PASOS_TOTALES) setTimeout(amainarTormenta, 400);
 }
-setTimeout(abrirCascanueces, 20000); // por si algo no llega nunca
+setTimeout(amainarTormenta, 20000); // por si algo no llega nunca
 
-// Apertura: el cascanueces abre la boca, hacemos zoom hacia ella y por el hueco aparece el cartel
+// Apertura: la tormenta de nieve amaina poco a poco y deja ver el cartel
 let abierto = false;
-function abrirCascanueces() {
+function amainarTormenta() {
   if (abierto) return;
   abierto = true;
   const carga = document.getElementById("carga");
-  const boca = document.getElementById("carga-boca");
-  if (!carga || !boca || movimientoReducido) { cartel.classList.add("esta-listo"); return; }
-  // centro de la boca en coordenadas del cartel (el cartel puede estar escalado)
-  const marco = cartel.getBoundingClientRect();
-  const b = boca.getBoundingClientRect();
-  const escala = marco.width / CARTEL.ancho;
-  const bx = (b.left + b.width / 2 - marco.left) / escala;
-  const by = (b.top + b.height * 0.75 - marco.top) / escala;
-  carga.style.setProperty("--bx", `${bx}px`);
-  carga.style.setProperty("--by", `${by}px`);
-  carga.classList.add("abriendo");
-  setTimeout(() => cartel.classList.add("esta-listo"), 2500);
+  if (!carga || movimientoReducido) { cartel.classList.add("esta-listo"); return; }
+  carga.classList.add("amainando");
+  setTimeout(() => cartel.classList.add("esta-listo"), 4400);
 }
 
 async function precargarTexturas() {
@@ -2188,9 +2179,20 @@ function volverCaravana() {
 }
 
 // mouseenter en el botón: donar
+// Estados visuales del botón de donar (dos propiedades: transform y color)
+const BOTON_DONAR = {
+  reposo: { transform: "scale(1) rotate(0deg)", color: "#111111" },
+  encendido: { transform: "scale(1.08) rotate(-8deg)", color: "#8a0b1f" },
+};
+function aplicarEstadoBoton(estado) {
+  botonDonar.style.transform = estado.transform;
+  botonDonar.style.color = estado.color;
+}
+
 function encenderEstrella() {
   if (estrellaEncendida) return;
   estrellaEncendida = true;
+  aplicarEstadoBoton(BOTON_DONAR.encendido);
   cartel.classList.add("esta-donando");
   congelarRegalos(false);
   enviarCaravana();
@@ -2199,6 +2201,7 @@ function encenderEstrella() {
 function apagarEstrella() {
   if (!estrellaEncendida) return;
   estrellaEncendida = false;
+  aplicarEstadoBoton(BOTON_DONAR.reposo);
   cartel.classList.remove("esta-donando");
   congelarRegalos(true);
   entristecerTodos();

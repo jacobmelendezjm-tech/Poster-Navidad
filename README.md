@@ -24,8 +24,8 @@ contraste busca concienciar y animar a donar.
 
 Detalles que acompañan:
 
-- **Apertura:** mientras carga, un cascanueces mastica sobre la nieve; al terminar abre la boca, la cámara entra
-  por ella y por el hueco aparece el cartel.
+- **Apertura:** mientras carga, una tormenta de nieve tapa el cartel; al terminar la tormenta amaina poco a poco
+  (se despeja la niebla y se calma la nieve) y deja ver el cartel.
 - **Santa Claus** vuela de ida y vuelta por el cielo (gira en cada extremo) soltando regalos; en el lado oscuro solo
   los suelta mientras se dona.
 - **Los regalos 3D** caen con física real, se apilan y, al hacer click, estallan en confeti y fuegos artificiales.
@@ -51,6 +51,8 @@ funcione aunque el cartel esté escalado) y en cada fotograma:
 
 `encenderEstrella()`:
 
+- el botón cambia **dos propiedades visuales desde JavaScript** (`aplicarEstadoBoton()`): `transform` (crece y
+  gira) y `color` del texto; al salir (interacción 2) recupera los valores iniciales con una transición más lenta;
 - la estrella dorada crece y gira;
 - los niños felices **cargan el árbol y los regalos y cruzan corriendo** al lado oscuro;
 - el lado oscuro **se calienta como un amanecer**: cambia el cielo, se encienden ventanas y farolas, la nieve se
@@ -84,8 +86,8 @@ No hay ninguna regla `:hover` en el CSS: los cambios los dispara JavaScript.
 ## Cómo está hecho
 
 ```
-├── index.html      Lienzo 3D, textos, botón de donar, pie con logos y pantalla de carga (cascanueces)
-├── style.css       Posición de los textos, pantalla de carga y apertura, escalado
+├── index.html      Lienzo 3D, textos, botón de donar, pie con logos y pantalla de carga (tormenta de nieve)
+├── style.css       Posición de los textos, tormenta de nieve de la apertura, escalado
 ├── main.js         Escena 3D e interacción (módulo ES)
 ├── servidor.js     Servidor local para verlo (node servidor.js)
 ├── assets/         HDRI, texturas y modelos 3D (Poly Haven, CC0) y mapa lunar (NASA)
