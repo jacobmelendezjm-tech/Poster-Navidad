@@ -15,7 +15,7 @@
   <!-- Dentro de la web de pósters (iframe): se marca antes de pintar nada, para que el
        cartel llene la tarjeta desde el primer instante, sin marco negro alrededor -->
   <script>try { if (window.self !== window.top) document.documentElement.classList.add("incrustado"); } catch (e) { document.documentElement.classList.add("incrustado"); }</script>
-  <link rel="stylesheet" href="style.css?v=real-60">
+  <link rel="stylesheet" href="style.css?v=real-62">
 
   <!-- Three.js (escena 3D realista) y cannon-es (física de los regalos) -->
   <script type="importmap">
@@ -27,7 +27,7 @@
       }
     }
   </script>
-  <script type="module" src="main.js?v=real-60"></script>
+  <script type="module" src="main.js?v=real-62"></script>
 </head>
 <body>
 
@@ -92,6 +92,26 @@
         <span>Diseño y desarrollo · <strong>Jacob Meléndez</strong></span>
         <span>DAW 2 · PlanetaFP</span>
       </p>
+
+      <!-- Pantalla de carga: "Cargando la Navidad" (se funde cuando el 3D está listo) -->
+      <div class="carga" id="carga" role="status" aria-live="polite">
+        <div class="carga__nieve" aria-hidden="true"><span style="--x:0%;--d:6s;--r:0.0s;--t:2px"></span><span style="--x:37%;--d:7s;--r:6.3s;--t:3px"></span><span style="--x:74%;--d:8s;--r:5.6s;--t:4px"></span><span style="--x:11%;--d:9s;--r:4.9s;--t:2px"></span><span style="--x:48%;--d:10s;--r:4.2s;--t:3px"></span><span style="--x:85%;--d:6s;--r:3.5s;--t:4px"></span><span style="--x:22%;--d:7s;--r:2.8s;--t:2px"></span><span style="--x:59%;--d:8s;--r:2.1s;--t:3px"></span><span style="--x:96%;--d:9s;--r:1.4s;--t:4px"></span><span style="--x:33%;--d:10s;--r:0.7s;--t:2px"></span><span style="--x:70%;--d:6s;--r:0.0s;--t:3px"></span><span style="--x:7%;--d:7s;--r:6.3s;--t:4px"></span><span style="--x:44%;--d:8s;--r:5.6s;--t:2px"></span><span style="--x:81%;--d:9s;--r:4.9s;--t:3px"></span><span style="--x:18%;--d:10s;--r:4.2s;--t:4px"></span><span style="--x:55%;--d:6s;--r:3.5s;--t:2px"></span><span style="--x:92%;--d:7s;--r:2.8s;--t:3px"></span><span style="--x:29%;--d:8s;--r:2.1s;--t:4px"></span><span style="--x:66%;--d:9s;--r:1.4s;--t:2px"></span><span style="--x:3%;--d:10s;--r:0.7s;--t:3px"></span><span style="--x:40%;--d:6s;--r:0.0s;--t:4px"></span><span style="--x:77%;--d:7s;--r:6.3s;--t:2px"></span><span style="--x:14%;--d:8s;--r:5.6s;--t:3px"></span><span style="--x:51%;--d:9s;--r:4.9s;--t:4px"></span><span style="--x:88%;--d:10s;--r:4.2s;--t:2px"></span><span style="--x:25%;--d:6s;--r:3.5s;--t:3px"></span><span style="--x:62%;--d:7s;--r:2.8s;--t:4px"></span><span style="--x:99%;--d:8s;--r:2.1s;--t:2px"></span><span style="--x:36%;--d:9s;--r:1.4s;--t:3px"></span><span style="--x:73%;--d:10s;--r:0.7s;--t:4px"></span><span style="--x:10%;--d:6s;--r:0.0s;--t:2px"></span><span style="--x:47%;--d:7s;--r:6.3s;--t:3px"></span><span style="--x:84%;--d:8s;--r:5.6s;--t:4px"></span><span style="--x:21%;--d:9s;--r:4.9s;--t:2px"></span><span style="--x:58%;--d:10s;--r:4.2s;--t:3px"></span><span style="--x:95%;--d:6s;--r:3.5s;--t:4px"></span><span style="--x:32%;--d:7s;--r:2.8s;--t:2px"></span><span style="--x:69%;--d:8s;--r:2.1s;--t:3px"></span><span style="--x:6%;--d:9s;--r:1.4s;--t:4px"></span><span style="--x:43%;--d:10s;--r:0.7s;--t:2px"></span></div>
+        <div class="carga__luces" aria-hidden="true"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span><span style="--i:6"></span><span style="--i:7"></span><span style="--i:8"></span><span style="--i:9"></span><span style="--i:10"></span><span style="--i:11"></span><span style="--i:12"></span><span style="--i:13"></span></div>
+        <div class="carga__centro">
+          <svg class="carga__regalo" viewBox="0 0 120 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="cg-caja" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d5e"/><stop offset="1" stop-color="#a8121f"/></linearGradient>
+              <linearGradient id="cg-oro" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#e09a1f"/></linearGradient>
+            </defs>
+            <g class="carga__tapa"><rect x="18" y="38" width="84" height="20" rx="5" fill="url(#cg-caja)"/><rect x="53" y="38" width="14" height="20" fill="url(#cg-oro)"/>
+              <path d="M60 38 C46 18 30 24 40 36 Z M60 38 C74 18 90 24 80 36 Z" fill="url(#cg-oro)"/><circle cx="60" cy="37" r="6" fill="#f2b928"/></g>
+            <rect x="24" y="58" width="72" height="50" rx="5" fill="url(#cg-caja)"/>
+            <rect x="53" y="58" width="14" height="50" fill="url(#cg-oro)"/>
+          </svg>
+          <p class="carga__titulo">Cargando la Navidad<span class="carga__puntos" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>
+          <div class="carga__barra"><span id="carga-progreso"></span></div>
+        </div>
+      </div>
 
     </article>
   </main>

@@ -254,6 +254,17 @@ function cargarImagen(url, intento = 0) {
 const TEXTURAS_PBR = ["snow_02", "castle_brick_02_white", "clay_roof_tiles_02", "dark_wooden_planks"];
 // Se descargan las texturas fotográficas antes de construir la escena (sin pantalla de
 // carga: mientras tanto el cartel simplemente aún no se dibuja).
+// Barra de la pantalla de carga: avanza con cada archivo que llega
+const barraCarga = document.getElementById("carga-progreso");
+let pasosCarga = 0;
+const PASOS_TOTALES = 14; // 12 texturas + fuente 3D + primer fotograma
+function avanzarCarga() {
+  pasosCarga++;
+  if (barraCarga) barraCarga.style.width = `${Math.min(100, 4 + (pasosCarga / PASOS_TOTALES) * 96)}%`;
+  if (pasosCarga >= PASOS_TOTALES) setTimeout(() => cartel.classList.add("esta-listo"), 350);
+}
+setTimeout(() => cartel.classList.add("esta-listo"), 20000); // por si algo no llega nunca
+
 async function precargarTexturas() {
   const tareas = [];
   for (const nombre of TEXTURAS_PBR) {
@@ -267,7 +278,7 @@ async function precargarTexturas() {
         if (color) t.colorSpace = THREE.SRGBColorSpace;
         t.needsUpdate = true;
         base[clave] = t;
-      }).catch(() => { base[clave] = null; }));
+      }).catch(() => { base[clave] = null; }).finally(avanzarCarga));
     }
   }
   await Promise.all(tareas);
@@ -1519,9 +1530,11 @@ function crearLema(fuente) {
       letras.push({ letra, material: letra.material[0], encendido: letra.userData.encendido, lado: centro.x < 0 ? "feliz" : "triste", base: letra.position.z, influencia: 0, centro: aPixeles(centro) });
     });
   });
+  avanzarCarga();
 }
 new FontLoader().load(FUENTE_3D, crearLema, undefined, () => {
   // si la fuente 3D no carga, el lema queda en el título accesible (h1)
+  avanzarCarga();
 });
 
 const COLOR_LETRA = { feliz: new THREE.Color(C.crema), apagada: new THREE.Color("#5d6370"), dorada: new THREE.Color("#ffcf6b") };
@@ -2379,6 +2392,7 @@ function iniciarCartel() {
 
   arrancado = true;
   alReanudar = reanudar;
+  requestAnimationFrame(() => requestAnimationFrame(avanzarCarga)); // primer fotograma dibujado
   // cuando el 3D ya ha dibujado un par de fotogramas, se funde la vista previa
 
   document.addEventListener("visibilitychange", () => { if (!document.hidden) reanudar(); });
