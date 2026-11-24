@@ -1313,6 +1313,35 @@ const letras = [];
 const LEMA_Z = 0.8;
 const matLetraCanto = new THREE.MeshStandardMaterial({ color: "#6a0f1c", roughness: 0.35, metalness: 0.2, envMapIntensity: 0.8 });
 
+// Las letras que cruzan la línea central se parten en dos: lo que queda a la derecha
+// (x > 0 en el mundo, que es justo el centro del cartel) se pinta apagado, píxel a píxel.
+// uEncendido: 0 = apagado · 1 = como en el lado feliz (al donar o bajo la luz del cursor).
+const encendidoCanto = { value: 0 };
+function partirPorLado(material, colorApagado, uniformeEncendido) {
+  const apagado = { value: new THREE.Color(colorApagado) };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uApagado = apagado;
+    shader.uniforms.uEncendido = uniformeEncendido;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>
+varying float vMundoX;`)
+      .replace("#include <worldpos_vertex>", `#include <worldpos_vertex>
+vMundoX = (modelMatrix * vec4(transformed, 1.0)).x;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>
+varying float vMundoX;
+uniform vec3 uApagado;
+uniform float uEncendido;`)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+        float ladoOscuro = smoothstep(-0.004, 0.004, vMundoX) * (1.0 - uEncendido);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uApagado, ladoOscuro);`)
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        totalEmissiveRadiance *= 1.0 - ladoOscuro;`);
+  };
+  material.customProgramCacheKey = () => "partido-" + colorApagado;
+}
+partirPorLado(matLetraCanto, "#1a1d24", encendidoCanto);
+
 function crearLema(fuente) {
   const kz = (D - LEMA_Z) / D;
   const anchoObjetivo = 7.68 * kz;
@@ -1327,7 +1356,10 @@ function crearLema(fuente) {
       const ancho = geo.boundingBox.max.x - geo.boundingBox.min.x;
       geo.translate(-geo.boundingBox.min.x - ancho / 2, 0, 0);
       const cara = new THREE.MeshPhysicalMaterial({ color: C.crema, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1, emissive: "#000000" });
+      const encendido = { value: 0 };
+      partirPorLado(cara, "#4a505c", encendido);
       const letra = new THREE.Mesh(geo, [cara, matLetraCanto]);
+      letra.userData.encendido = encendido;
       letra.position.x = cursorX + ancho / 2;
       piezas.push({ letra, ancho });
       cursorX += ancho + 0.06;
@@ -1345,7 +1377,7 @@ function crearLema(fuente) {
       const centro = new THREE.Vector3();
       letra.getWorldPosition(centro);
       centro.y += altoLinea / 2;
-      letras.push({ letra, material: letra.material[0], lado: centro.x < 0 ? "feliz" : "triste", base: letra.position.z, influencia: 0, centro: aPixeles(centro) });
+      letras.push({ letra, material: letra.material[0], encendido: letra.userData.encendido, lado: centro.x < 0 ? "feliz" : "triste", base: letra.position.z, influencia: 0, centro: aPixeles(centro) });
     });
   });
 }
@@ -1384,12 +1416,13 @@ function pintarLetras(dt) {
     l.letra.position.z = l.base + l.z;
     l.letra.rotation.set(l.rx, l.ry, 0);
 
-    if (l.lado === "feliz") _base.copy(COLOR_LETRA.feliz);
-    else _base.lerpColors(COLOR_LETRA.apagada, COLOR_LETRA.feliz, calidez);
+    // el color base es el del lado feliz; el shader apaga la parte que cae en el lado oscuro
+    _base.copy(COLOR_LETRA.feliz);
+    l.encendido.value = Math.max(calidez, l.influencia);
     // la luz solo entibia la letra: un toque dorado, sin volverla de metal
     l.material.color.lerpColors(_base, COLOR_LETRA.dorada, l.influencia * 0.55);
     l.material.metalness = l.influencia * 0.25;
-    l.material.roughness = lerp(l.lado === "feliz" ? 0.28 : 0.6 - calidez * 0.32, 0.22, l.influencia);
+    l.material.roughness = lerp(0.28, 0.22, l.influencia);
     l.material.emissive.copy(COLOR_LETRA.dorada).multiplyScalar(l.influencia * 0.18);
   });
 }
@@ -2031,6 +2064,7 @@ function animar() {
   calidez = lerp(calidez, objetivoCalidez, Math.min(1, dt * (objetivoCalidez > calidez ? 0.9 : 1.6)));
   aplicarCalidez();
   cieloTristeCalido.material.opacity = calidez;
+  encendidoCanto.value = calidez;
   luzDonacion.intensity = calidez * 34;
   luzFria.intensity = 5 * (1 - calidez);
   arbolSeco.visible = calidez < 0.98;

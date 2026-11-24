@@ -271,36 +271,70 @@ body {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
-/* Llamada a donar en el centro del pie */
+/* Llamada a donar: botón dorado con relieve, icono de regalo y flecha */
 .pie__donar {
-  display: grid;
-  justify-items: start;
-  gap: 6px;
-  padding: 14px 22px;
-  border: 1px solid rgba(255, 209, 102, 0.55);
-  border-radius: 12px;
-  background: rgba(255, 209, 102, 0.08);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffe7a3 0%, #f6c443 45%, #e09a1f 100%);
+  color: #2a1606;
+  box-shadow:
+    0 12px 28px rgba(224, 154, 31, 0.35),
+    0 2px 0 rgba(120, 70, 10, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 4px rgba(150, 80, 0, 0.25);
   white-space: nowrap;
-  transition: background 0.3s ease, border-color 0.3s ease;
+  transition: transform 0.35s var(--salida-rebote), box-shadow 0.35s ease;
 }
 
 .cartel.esta-donando .pie__donar {
-  background: rgba(255, 209, 102, 0.18);
-  border-color: var(--dorado);
+  transform: scale(1.04);
+  box-shadow:
+    0 16px 36px rgba(255, 196, 70, 0.55),
+    0 2px 0 rgba(120, 70, 10, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 4px rgba(150, 80, 0, 0.25);
+}
+
+.pie__donar-icono {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #e8434f, #a8121f 70%);
+  color: #fff4dc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 8px rgba(120, 10, 20, 0.4);
+}
+
+.pie__donar-texto {
+  display: grid;
+  gap: 3px;
 }
 
 .pie__donar-titulo {
-  font: 800 24px/1 var(--fuente-texto);
-  letter-spacing: -0.01em;
-  color: var(--crema);
+  font: 800 21px/1 var(--fuente-texto);
+  letter-spacing: -0.015em;
 }
 
 .pie__donar-accion {
-  font: 700 13px/1 var(--fuente-texto);
-  letter-spacing: 0.04em;
+  font: 700 11px/1 var(--fuente-texto);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--dorado);
+  color: rgba(42, 22, 6, 0.72);
+}
+
+.pie__donar-flecha {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: rgba(42, 22, 6, 0.12);
+  font: 800 17px/1 var(--fuente-texto);
 }
 
 .pie__donar:focus-visible {
@@ -344,16 +378,18 @@ body {
   position: absolute;
   left: var(--margen);
   right: var(--margen);
-  bottom: 14px;
+  bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font: 500 11px/1 var(--fuente-texto);
-  color: rgba(255, 241, 230, 0.7);
+  font: 600 10px/1 var(--fuente-texto);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 241, 230, 0.45);
 }
 
 .creditos strong {
-  color: var(--crema);
+  color: rgba(255, 241, 230, 0.85);
 }
 
 .creditos__logo {
