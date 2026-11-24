@@ -15,7 +15,7 @@
   <!-- Dentro de la web de pósters (iframe): se marca antes de pintar nada, para que el
        cartel llene la tarjeta desde el primer instante, sin marco negro alrededor -->
   <script>try { if (window.self !== window.top) document.documentElement.classList.add("incrustado"); } catch (e) { document.documentElement.classList.add("incrustado"); }</script>
-  <link rel="stylesheet" href="style.css?v=real-62">
+  <link rel="stylesheet" href="style.css?v=real-63">
 
   <!-- Three.js (escena 3D realista) y cannon-es (física de los regalos) -->
   <script type="importmap">
@@ -27,7 +27,7 @@
       }
     }
   </script>
-  <script type="module" src="main.js?v=real-62"></script>
+  <script type="module" src="main.js?v=real-63"></script>
 </head>
 <body>
 
@@ -97,19 +97,62 @@
       <div class="carga" id="carga" role="status" aria-live="polite">
         <div class="carga__nieve" aria-hidden="true"><span style="--x:0%;--d:6s;--r:0.0s;--t:2px"></span><span style="--x:37%;--d:7s;--r:6.3s;--t:3px"></span><span style="--x:74%;--d:8s;--r:5.6s;--t:4px"></span><span style="--x:11%;--d:9s;--r:4.9s;--t:2px"></span><span style="--x:48%;--d:10s;--r:4.2s;--t:3px"></span><span style="--x:85%;--d:6s;--r:3.5s;--t:4px"></span><span style="--x:22%;--d:7s;--r:2.8s;--t:2px"></span><span style="--x:59%;--d:8s;--r:2.1s;--t:3px"></span><span style="--x:96%;--d:9s;--r:1.4s;--t:4px"></span><span style="--x:33%;--d:10s;--r:0.7s;--t:2px"></span><span style="--x:70%;--d:6s;--r:0.0s;--t:3px"></span><span style="--x:7%;--d:7s;--r:6.3s;--t:4px"></span><span style="--x:44%;--d:8s;--r:5.6s;--t:2px"></span><span style="--x:81%;--d:9s;--r:4.9s;--t:3px"></span><span style="--x:18%;--d:10s;--r:4.2s;--t:4px"></span><span style="--x:55%;--d:6s;--r:3.5s;--t:2px"></span><span style="--x:92%;--d:7s;--r:2.8s;--t:3px"></span><span style="--x:29%;--d:8s;--r:2.1s;--t:4px"></span><span style="--x:66%;--d:9s;--r:1.4s;--t:2px"></span><span style="--x:3%;--d:10s;--r:0.7s;--t:3px"></span><span style="--x:40%;--d:6s;--r:0.0s;--t:4px"></span><span style="--x:77%;--d:7s;--r:6.3s;--t:2px"></span><span style="--x:14%;--d:8s;--r:5.6s;--t:3px"></span><span style="--x:51%;--d:9s;--r:4.9s;--t:4px"></span><span style="--x:88%;--d:10s;--r:4.2s;--t:2px"></span><span style="--x:25%;--d:6s;--r:3.5s;--t:3px"></span><span style="--x:62%;--d:7s;--r:2.8s;--t:4px"></span><span style="--x:99%;--d:8s;--r:2.1s;--t:2px"></span><span style="--x:36%;--d:9s;--r:1.4s;--t:3px"></span><span style="--x:73%;--d:10s;--r:0.7s;--t:4px"></span><span style="--x:10%;--d:6s;--r:0.0s;--t:2px"></span><span style="--x:47%;--d:7s;--r:6.3s;--t:3px"></span><span style="--x:84%;--d:8s;--r:5.6s;--t:4px"></span><span style="--x:21%;--d:9s;--r:4.9s;--t:2px"></span><span style="--x:58%;--d:10s;--r:4.2s;--t:3px"></span><span style="--x:95%;--d:6s;--r:3.5s;--t:4px"></span><span style="--x:32%;--d:7s;--r:2.8s;--t:2px"></span><span style="--x:69%;--d:8s;--r:2.1s;--t:3px"></span><span style="--x:6%;--d:9s;--r:1.4s;--t:4px"></span><span style="--x:43%;--d:10s;--r:0.7s;--t:2px"></span></div>
         <div class="carga__luces" aria-hidden="true"><span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span><span style="--i:6"></span><span style="--i:7"></span><span style="--i:8"></span><span style="--i:9"></span><span style="--i:10"></span><span style="--i:11"></span><span style="--i:12"></span><span style="--i:13"></span></div>
+        <div class="carga__escena">
         <div class="carga__centro">
-          <svg class="carga__regalo" viewBox="0 0 120 120" aria-hidden="true">
+          <!-- Cascanueces: al terminar la carga abre la boca y entramos por ella al cartel -->
+          <svg class="carga__cascanueces" viewBox="0 0 200 360" aria-hidden="true">
             <defs>
-              <linearGradient id="cg-caja" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d5e"/><stop offset="1" stop-color="#a8121f"/></linearGradient>
-              <linearGradient id="cg-oro" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#e09a1f"/></linearGradient>
+              <linearGradient id="cn-rojo" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e8303f"/><stop offset="0.6" stop-color="#c8102e"/><stop offset="1" stop-color="#8a0b1f"/></linearGradient>
+              <linearGradient id="cn-oro" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#d9961e"/></linearGradient>
+              <linearGradient id="cn-piel" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbd9bf"/><stop offset="1" stop-color="#e9b493"/></linearGradient>
+              <linearGradient id="cn-azul" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2d5bbf"/><stop offset="1" stop-color="#16306e"/></linearGradient>
             </defs>
-            <g class="carga__tapa"><rect x="18" y="38" width="84" height="20" rx="5" fill="url(#cg-caja)"/><rect x="53" y="38" width="14" height="20" fill="url(#cg-oro)"/>
-              <path d="M60 38 C46 18 30 24 40 36 Z M60 38 C74 18 90 24 80 36 Z" fill="url(#cg-oro)"/><circle cx="60" cy="37" r="6" fill="#f2b928"/></g>
-            <rect x="24" y="58" width="72" height="50" rx="5" fill="url(#cg-caja)"/>
-            <rect x="53" y="58" width="14" height="50" fill="url(#cg-oro)"/>
+            <!-- penacho y gorro -->
+            <path d="M100 6 C88 0 82 14 92 20 C84 22 86 32 96 30 L104 30 C114 32 116 22 108 20 C118 14 112 0 100 6 Z" fill="#fff6e6"/>
+            <rect x="56" y="24" width="88" height="88" rx="10" fill="url(#cn-rojo)"/>
+            <path d="M62 34 h76 M62 46 h76" stroke="url(#cn-oro)" stroke-width="3"/>
+            <circle cx="100" cy="64" r="11" fill="url(#cn-oro)"/>
+            <path d="M100 56 l3 5 6 1 -4 4 1 6 -6 -3 -6 3 1 -6 -4 -4 6 -1 Z" fill="#c8102e"/>
+            <rect x="52" y="96" width="96" height="14" rx="4" fill="url(#cn-oro)"/>
+            <!-- pelo blanco a los lados -->
+            <ellipse cx="58" cy="140" rx="12" ry="26" fill="#fbf8f2"/>
+            <ellipse cx="142" cy="140" rx="12" ry="26" fill="#fbf8f2"/>
+            <!-- cara -->
+            <rect x="62" y="108" width="76" height="66" rx="12" fill="url(#cn-piel)"/>
+            <path d="M76 126 q8 -6 16 0 M108 126 q8 -6 16 0" stroke="#2a1a12" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <circle cx="84" cy="136" r="6.5" fill="#1b1414"/><circle cx="116" cy="136" r="6.5" fill="#1b1414"/>
+            <circle cx="86" cy="134" r="2" fill="#fff"/><circle cx="118" cy="134" r="2" fill="#fff"/>
+            <circle cx="74" cy="152" r="7" fill="#f08a8a" opacity="0.7"/><circle cx="126" cy="152" r="7" fill="#f08a8a" opacity="0.7"/>
+            <ellipse cx="100" cy="150" rx="7" ry="9" fill="#e9a07f"/>
+            <!-- boca: el interior oscuro por el que entraremos -->
+            <rect id="carga-boca" x="74" y="168" width="52" height="30" rx="4" fill="#1a080c"/>
+            <rect x="78" y="168" width="44" height="6" rx="2" fill="#fffdf6"/>
+            <!-- bigote -->
+            <path d="M100 160 C90 154 74 158 70 168 C80 166 90 168 100 166 C110 168 120 166 130 168 C126 158 110 154 100 160 Z" fill="#fbf8f2"/>
+            <!-- cuerpo -->
+            <rect x="52" y="214" width="96" height="86" rx="14" fill="url(#cn-rojo)"/>
+            <path d="M100 214 V300" stroke="url(#cn-oro)" stroke-width="4"/>
+            <circle cx="100" cy="232" r="4" fill="url(#cn-oro)"/><circle cx="100" cy="250" r="4" fill="url(#cn-oro)"/><circle cx="100" cy="268" r="4" fill="url(#cn-oro)"/>
+            <rect x="52" y="278" width="96" height="9" fill="#1b1414"/><rect x="93" y="276" width="14" height="13" rx="2" fill="url(#cn-oro)"/>
+            <ellipse cx="54" cy="218" rx="14" ry="7" fill="url(#cn-oro)"/><ellipse cx="146" cy="218" rx="14" ry="7" fill="url(#cn-oro)"/>
+            <rect x="32" y="220" width="18" height="62" rx="9" fill="url(#cn-rojo)"/><rect x="150" y="220" width="18" height="62" rx="9" fill="url(#cn-rojo)"/>
+            <rect x="32" y="272" width="18" height="7" fill="#fbf8f2"/><rect x="150" y="272" width="18" height="7" fill="#fbf8f2"/>
+            <circle cx="41" cy="286" r="8" fill="url(#cn-piel)"/><circle cx="159" cy="286" r="8" fill="url(#cn-piel)"/>
+            <!-- piernas, botas y peana -->
+            <rect x="68" y="298" width="26" height="40" rx="6" fill="url(#cn-azul)"/><rect x="106" y="298" width="26" height="40" rx="6" fill="url(#cn-azul)"/>
+            <rect x="64" y="334" width="32" height="14" rx="6" fill="#1b1414"/><rect x="104" y="334" width="32" height="14" rx="6" fill="#1b1414"/>
+            <rect x="44" y="346" width="112" height="12" rx="5" fill="url(#cn-oro)"/>
+            <!-- mandíbula con dientes y barba: es lo que se abre -->
+            <g class="carga__mandibula">
+              <rect x="66" y="172" width="68" height="30" rx="8" fill="url(#cn-piel)"/>
+              <rect x="78" y="172" width="44" height="6" rx="2" fill="#fffdf6"/>
+              <path d="M62 184 C60 214 80 236 100 240 C120 236 140 214 138 184 C126 196 74 196 62 184 Z" fill="#fbf8f2"/>
+              <path d="M78 204 q4 10 0 20 M100 210 q4 12 0 24 M122 204 q-4 10 0 20" stroke="#e4ddd0" stroke-width="2" fill="none"/>
+            </g>
           </svg>
           <p class="carga__titulo">Cargando la Navidad<span class="carga__puntos" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>
           <div class="carga__barra"><span id="carga-progreso"></span></div>
+        </div>
         </div>
       </div>
 

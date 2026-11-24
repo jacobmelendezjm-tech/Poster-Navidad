@@ -261,9 +261,29 @@ const PASOS_TOTALES = 14; // 12 texturas + fuente 3D + primer fotograma
 function avanzarCarga() {
   pasosCarga++;
   if (barraCarga) barraCarga.style.width = `${Math.min(100, 4 + (pasosCarga / PASOS_TOTALES) * 96)}%`;
-  if (pasosCarga >= PASOS_TOTALES) setTimeout(() => cartel.classList.add("esta-listo"), 350);
+  if (pasosCarga >= PASOS_TOTALES) setTimeout(abrirCascanueces, 400);
 }
-setTimeout(() => cartel.classList.add("esta-listo"), 20000); // por si algo no llega nunca
+setTimeout(abrirCascanueces, 20000); // por si algo no llega nunca
+
+// Apertura: el cascanueces abre la boca, hacemos zoom hacia ella y por el hueco aparece el cartel
+let abierto = false;
+function abrirCascanueces() {
+  if (abierto) return;
+  abierto = true;
+  const carga = document.getElementById("carga");
+  const boca = document.getElementById("carga-boca");
+  if (!carga || !boca || movimientoReducido) { cartel.classList.add("esta-listo"); return; }
+  // centro de la boca en coordenadas del cartel (el cartel puede estar escalado)
+  const marco = cartel.getBoundingClientRect();
+  const b = boca.getBoundingClientRect();
+  const escala = marco.width / CARTEL.ancho;
+  const bx = (b.left + b.width / 2 - marco.left) / escala;
+  const by = (b.top + b.height * 0.75 - marco.top) / escala;
+  carga.style.setProperty("--bx", `${bx}px`);
+  carga.style.setProperty("--by", `${by}px`);
+  carga.classList.add("abriendo");
+  setTimeout(() => cartel.classList.add("esta-listo"), 2500);
+}
 
 async function precargarTexturas() {
   const tareas = [];

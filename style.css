@@ -494,26 +494,82 @@ html.incrustado .escenario {
   gap: 26px;
 }
 
-.carga__regalo {
-  width: 190px;
-  height: 190px;
-  filter: drop-shadow(0 0 30px rgba(255, 196, 70, 0.45));
-  animation: carga-bote 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
+/* Cascanueces */
+.carga__cascanueces {
+  width: 230px;
+  height: 414px;
+  overflow: visible;
+  filter: drop-shadow(0 0 34px rgba(255, 196, 70, 0.35));
+  animation: carga-balanceo 2.4s ease-in-out infinite alternate;
+  transform-origin: 50% 100%;
 }
 
-.carga__tapa {
-  transform-origin: 60px 58px;
-  animation: carga-tapa 1.2s ease-in-out infinite alternate;
+.carga__mandibula {
+  transform-box: view-box;
+  animation: carga-masticar 1.1s ease-in-out infinite;
 }
 
-@keyframes carga-bote {
-  from { transform: translateY(0) rotate(-4deg); }
-  to { transform: translateY(-18px) rotate(4deg); }
+@keyframes carga-balanceo {
+  from { transform: rotate(-2deg); }
+  to { transform: rotate(2deg); }
 }
 
-@keyframes carga-tapa {
-  from { transform: translateY(0) rotate(0); }
-  to { transform: translateY(-10px) rotate(-6deg); }
+@keyframes carga-masticar {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(8px); }
+}
+
+/* Apertura: la boca se abre, entramos en ella y por el hueco aparece el cartel */
+@property --hueco {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.carga__escena {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform-origin: var(--bx, 50%) var(--by, 50%);
+}
+
+.carga.abriendo {
+  -webkit-mask-image: radial-gradient(circle var(--hueco) at var(--bx) var(--by), transparent 97%, #000 100%);
+  mask-image: radial-gradient(circle var(--hueco) at var(--bx) var(--by), transparent 97%, #000 100%);
+  animation: carga-hueco 1.9s cubic-bezier(0.7, 0, 0.84, 0) 0.55s forwards;
+}
+
+.carga.abriendo .carga__escena {
+  animation: carga-zoom 2.1s cubic-bezier(0.7, 0, 0.84, 0) 0.35s forwards;
+}
+
+.carga.abriendo .carga__mandibula {
+  animation: carga-abrir 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.carga.abriendo .carga__cascanueces {
+  animation: none;
+}
+
+.carga.abriendo .carga__titulo,
+.carga.abriendo .carga__barra,
+.carga.abriendo .carga__luces {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+@keyframes carga-abrir {
+  to { transform: translateY(34px); }
+}
+
+@keyframes carga-zoom {
+  to { transform: scale(26); }
+}
+
+@keyframes carga-hueco {
+  0% { --hueco: 0px; }
+  100% { --hueco: 1700px; }
 }
 
 .carga__titulo {
@@ -557,8 +613,8 @@ html.incrustado .escenario {
 @media (prefers-reduced-motion: reduce) {
   .carga__nieve span,
   .carga__luces span,
-  .carga__regalo,
-  .carga__tapa,
+  .carga__cascanueces,
+  .carga__mandibula,
   .carga__puntos i {
     animation: none;
   }
